@@ -42,8 +42,13 @@ check('smoke: the page opens from disk', (await page.title()).includes('KATAK'),
 const k0 = await kpiText();
 check('smoke: the result shows mean power, energy per year, rpm', /Вт/.test(k0) && /кВт·ч/.test(k0) && /об\/мин/.test(k0), k0.replace(/\s+/g, ' ').slice(0, 120));
 const warn0 = await page.locator('#warnings').innerText();
-check('smoke: the default turbine passes the geometry checks and fits the 220 mm bed', /проходит проверки/.test(warn0) && !/больше стола/.test(warn0), warn0.replace(/\s+/g, ' ').slice(0, 160));
+check('smoke: the default turbine passes the geometry checks and fits the 220 mm bed', /удовлетворяет проверкам/.test(warn0) && !/превышает область печати/.test(warn0), warn0.replace(/\s+/g, ' ').slice(0, 160));
 await page.screenshot({ path: join(shots, '1-defaults-ru.png'), fullPage: true });
+// ---- 1b. a figure on every step (ideas/04): the wind profile, the rotor side view, the wall cross-section, the power curve
+for (const id of ['#viz-site', '#viz-rotor', '#viz-print', '#chart']) {
+  const nEl = await page.locator(id + ' > *').count();
+  check(`figure ${id} is drawn`, nEl >= 5, `${nEl} elements`);
+}
 
 // ---- 2. the nozzle → the wall snaps to whole lines (plans/01 criterion 4)
 await setField('nozzle_mm', '0.4'); await setField('layer_mm', '0.2'); await setField('wall_mm', '1.0');
@@ -57,7 +62,7 @@ await setField('nozzle_mm', '0.4'); await setField('layer_mm', ''); await setFie
 // ---- 3. «by power»: the page picks the diameter
 await setField('mode', 'power'); await setField('target_w', '5'); await setField('target_v', '6');
 const wp = await page.locator('#warnings').innerText();
-check('«by power» 5 W at 6 m/s → a diameter is suggested', /Для 5(,0)? Вт при 6(,0)? м\/с нужен ротор ≈ [\d\s ]+ мм/.test(wp), (wp.match(/Для.*мм/) || [''])[0]);
+check('«by power» 5 W at 6 m/s → a diameter is suggested', /Для мощности 5(,0)? Вт при скорости ветра 6(,0)? м\/с требуется ротор диаметром около [\d\s ]+ мм/.test(wp), (wp.match(/Для мощности.*мм/) || [''])[0]);
 await setField('mode', 'diameter');
 
 // ---- 4. downloads: rotor and nose as valid binary STL

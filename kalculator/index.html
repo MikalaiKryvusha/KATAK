@@ -132,19 +132,19 @@ footer { color: var(--muted); font-size: 13px; display: flex; flex-direction: co
 <section class="step" id="s1">
   <div class="n">1</div>
   <div class="text"><h2 data-i18n="s1t"></h2><div class="grid" data-form="site"></div></div>
-  <div class="side"><p data-i18n="s1p"></p><ul class="notes" id="site-notes"></ul></div>
+  <div class="side"><svg class="chart" id="viz-site" viewBox="0 0 520 300" role="img"></svg><p class="note" data-i18n="s1p"></p></div>
 </section>
 
 <section class="step" id="s2">
   <div class="n">2</div>
   <div class="text"><h2 data-i18n="s2t"></h2><div class="grid" data-form="turbine"></div></div>
-  <div class="side"><p data-i18n="s2p"></p><table class="spec" id="geo-spec"></table></div>
+  <div class="side"><svg class="chart" id="viz-rotor" viewBox="0 0 520 300" role="img"></svg><p class="note" data-i18n="s2p"></p><table class="spec" id="geo-spec"></table></div>
 </section>
 
 <section class="step" id="s3">
   <div class="n">3</div>
   <div class="text"><h2 data-i18n="s3t"></h2><div class="grid" data-form="print"></div></div>
-  <div class="side"><p data-i18n="s3p"></p><table class="spec" id="print-spec"></table></div>
+  <div class="side"><svg class="chart" id="viz-print" viewBox="0 0 520 220" role="img"></svg><p class="note" data-i18n="s3p"></p><table class="spec" id="print-spec"></table></div>
 </section>
 
 <section class="step wide" id="s4">
@@ -372,9 +372,9 @@ const KATAK = (() => {
     hub_od_mm: null,                     // null → max(0.1·D, bearing OD + 2·3 lines)
     hub_front_mm: 6, hub_back_mm: 10,
     bore: 'bearings', bore_kind: 'round', bore_mm: 10, bearing_od_mm: 26, bearing_w_mm: 8, fit_mm: 0.1,
-    ties: 3, tie_mm: 4, tie_at: 0.7,     // ties between neighbouring turns in `ties` meridional half-planes (§5.8), at tie_at of the span
+    ties: 0, tie_mm: 3, tie_at: 0.7,     // ties between neighbouring turns in `ties` meridional half-planes (§5.8), at tie_at of the span
     rim: false, rim_mm: 4,               // exit ring — only for D ≥ 0.4 m and light (§5.8)
-    nose: true, nose_ratio: 0.8, nose_shape: 'ellipse', nose_wall_mm: 2.0, nose_fit_mm: 0.3,
+    nose: true, nose_ratio: 0.8, nose_shape: 'ellipse', nose_base_mm: null, nose_fit_mm: 0.2, nose_gap_mm: 40,
     detail: 'medium',
   };
   // The opening angle law α(u): fixed, or piecewise linear through (1/3, α1), (2/3, α2), (1, α3), constant below 1/3 (§6.2).
@@ -466,7 +466,10 @@ const KATAK = (() => {
         const r = A.r0 + p.tie_at * (A.r1 - A.r0);
         if (r > B.r1 - p.tie_mm) continue;                    // the next turn does not reach this radius
         const zAt = (S) => S.z0 + (r - S.r0) * (S.z1 - S.z0) / (S.r1 - S.r0);
-        const z0 = zAt(A) - wall * 0.4, z1 = zAt(B) + wall * 0.4;   // ends sink into both blades but stay inside them (a full wall poked through — render, 2026-11-16)
+        // ends stop at the blades' middle surface: a round rod wider than the blade's axial thickness cannot sit inside an
+        // inclined blade, its edge pokes out on one side (owner 2026-11-16 16:24: «перемычки пробивают лопасти насквозь»);
+        // ties are OFF by default since then
+        const z0 = zAt(A), z1 = zAt(B);
         const path = []; const nSeg = 6;
         for (let j = 0; j <= nSeg; j++) path.push([r * c, r * s, z0 + (z1 - z0) * j / nSeg]);
         out.push(sweepTube(path, p.tie_mm / 2, Math.max(8, det.round / 4)));
@@ -474,21 +477,22 @@ const KATAK = (() => {
     }
     return out;
   }
-  // The nose (§6.8, idea 01): an ellipsoid / ogive / cone cup over the hub's front end, printed apex up; base radius = hub
-  // radius + wall, length = nose_ratio · base diameter. A cup, not sealed — the open base drains condensate (§6.8 p. 3).
+  // The nose fairing (§6.8, ideas/01, ideas/04): a solid of revolution that sits ON THE AXLE in front of the front bearing
+  // stand, 10–100 mm ahead of the rotor (owner 2026-11-16 16:24: «нос не непосредственно на турбину надевается, а на
+  // отдалении в 10...100 мм»). Profile: tip → outer dome → flat base → blind bore for the axle end → bore bottom (a pole).
+  // Printed tip up; base diameter = the hub's by default. Round 1 was a cup over the hub — replaced. [NOT-TESTED]
   function nose(p, d, det) {
-    const Ri = d.rh + p.nose_fit_mm / 2, Rb = Ri + p.nose_wall_mm, Ln = 2 * Rb * p.nose_ratio, n = det.along;
+    const Rb = (p.nose_base_mm ?? 2 * d.rh) / 2, Ln = 2 * Rb * p.nose_ratio, n = det.along;
+    const rb = (p.bore_mm + p.nose_fit_mm) / 2, Lb = Math.min(Ln * 0.6, Math.max(6, 1.5 * p.bore_mm));   // blind bore: depth ≈ 1.5·axle
     const shape = (u) => {                                  // u: 0 at the base → 1 at the tip; returns r/Rb  (§6.8 [53])
       if (p.nose_shape === 'cone') return 1 - u;
       if (p.nose_shape === 'ogive') { const L = 1, rho = (1 + L * L) / 2, x = 1 - u; return Math.sqrt(Math.max(0, rho * rho - (L - x) * (L - x))) + 1 - rho; }
       return Math.sqrt(Math.max(0, 1 - u * u));             // ellipsoid
     };
-    const outer = [], inner = [], Li = Math.max(p.hub_front_mm + 1, Ln - p.nose_wall_mm * 1.5);
+    const outer = [];
     for (let i = 0; i <= n; i++) { const u = i / n; outer.push([Rb * shape(u), Ln * u]); }
-    for (let i = 0; i <= n; i++) { const u = i / n; inner.push([Ri * shape(u), Li * u]); }
-    const prof = [...outer.slice().reverse(), ...inner];
-    prof[0] = [0, Ln]; prof[prof.length - 1] = [0, Li];
-    return { mesh: revolve(prof, det.round), length_mm: Ln, base_mm: 2 * Rb };
+    const prof = [[0, Ln], ...outer.slice(1, -1).reverse(), [Rb, 0], [rb, 0], [rb, Lb], [0, Lb]];
+    return { mesh: revolve(prof, det.round), length_mm: Ln, base_mm: 2 * Rb, bore_mm: 2 * rb, gap_mm: p.nose_gap_mm };
   }
   // Exit ring (§5.8 p. 3): a round tube through the three exit edges at z = L_s, radius R.
   function rim(p, d, det) {
@@ -497,6 +501,13 @@ const KATAK = (() => {
     return sweepTube(loop, p.rim_mm / 2, Math.max(8, det.round / 4), true);
   }
 
+  // Detail as a percentage 10–100 % (owner 2026-11-16 16:29: «в процентах задавать, с шагом 10%»): linear between the
+  // «low» and «ultra» sampling counts; a named level is still accepted (the tools and the tests use them). [NOT-TESTED]
+  function detailOf(v) {
+    if (typeof v !== 'number') return DETAIL[v] || DETAIL.medium;
+    const t = (Math.min(100, Math.max(10, v)) - 10) / 90, lo = DETAIL.low, hi = DETAIL.ultra, L = (a, b) => Math.round(a + (b - a) * t);
+    return { along: L(lo.along, hi.along), across: L(lo.across, hi.across), round: Math.round(L(lo.round, hi.round) / 4) * 4 };
+  }
   // Resolve the derived defaults (wall, hub), then build every printable part — meshes in mm, each standing on the bed.
   function resolve(input = {}) {
     const p = { ...DEFAULTS, ...input };
@@ -515,7 +526,7 @@ const KATAK = (() => {
   }
   function build(input = {}) {
     const { p, wf } = resolve(input);
-    const det = DETAIL[p.detail] || DETAIL.medium, wall = wf.wall_mm, d = dims(p, wall);
+    const det = detailOf(p.detail), wall = wf.wall_mm, d = dims(p, wall);
     const rotor = mesh();
     for (let k = 0; k < p.blades; k++) append(rotor, blade(p, d, k, wall, det));
     append(rotor, hub(p, d, det));
@@ -526,6 +537,21 @@ const KATAK = (() => {
     let noseInfo = null;
     if (p.nose) { noseInfo = nose(p, d, det); parts.nose = noseInfo.mesh; }
     return { params: p, wall: wf, dims: d, checks: checks(p, d, wall), nose: noseInfo && { length_mm: noseInfo.length_mm, base_mm: noseInfo.base_mm }, parts, lift_mm: -lo[2] };
+  }
+
+  // Side view for the page's rotor diagram (ideas/04): the blade edges projected on the plane through the axis (z along,
+  // x across), the side flagged by y (front / back), the outer envelope, the hub and the main dimensions — from the SAME
+  // geometry that writes the STL. [NOT-TESTED]
+  function sideView(input = {}) {
+    const { p, wf } = resolve(input), d = dims(p, wf.wall_mm), edges = [], n = 160;
+    for (let k = 0; k < p.blades; k++) {
+      const pts = [];
+      for (let i = 0; i <= n; i++) { const u = d.u0 + (1 - d.u0) * i / n, P = bladeSurface(p, d, k, u, 1); pts.push([P[2], P[0], P[1] >= 0]); }
+      edges.push(pts);
+    }
+    const env = [];
+    for (let i = 0; i <= n; i++) { const u = d.u0 + (1 - d.u0) * i / n; env.push([d.Ls * Math.pow(u, p.q_exp), d.rh + (d.R - d.rh) * Math.pow(u, p.p_exp)]); }
+    return { p, wall: wf, R: d.R, Ls: d.Ls, rh: d.rh, edges, env, hubFront: p.hub_front_mm, hubBack: p.hub_back_mm };
   }
 
   // ---------------------------------------------------------------- physics (researches/01 §2–§5, SI units)
@@ -656,14 +682,15 @@ const KATAK = (() => {
     return new Uint8Array(buf);
   }
 
-  return { DEFAULTS, DETAIL, SITE_DEFAULTS, CP_PRESETS, TERRAIN, SITE, MATERIALS, BEARINGS, build, resolve, alphaAt, wallForNozzle,
+  return { DEFAULTS, DETAIL, SITE_DEFAULTS, CP_PRESETS, TERRAIN, SITE, MATERIALS, BEARINGS, build, resolve, sideView, alphaAt, wallForNozzle,
     physics, diameterForPower, density, windAt, gamma, weibullC, toSTL, checkClosed, signedVolume, bounds,
     _: { gridSolid, prism, revolve, sweepTube, profileRadius, mesh, append } };
 })();
 // ===== CORE-END =====
 // =====================================================================================================================
-// The page: a form built from one schema, the RU/EN dictionary, the calculation on every change, the WebGL preview and the
-// STL downloads. Nothing here computes physics or geometry — it calls KATAK. [NOT-TESTED]
+// The page: a form built from one schema, the RU/EN dictionary, the calculation on every change, a figure on every step
+// (ideas/04), the horizontal WebGL model of the installation and the STL downloads. Nothing here computes physics or
+// geometry — it calls KATAK. [NOT-TESTED]
 // =====================================================================================================================
 const $ = (s) => document.querySelector(s);
 
@@ -694,156 +721,186 @@ const FIELDS = [
   ['wall_mm', 'print', 'auto', '', { min: 0.4, max: 10, step: 0.1, unit: 'mm' }],
   ['material', 'print', 'sel', 'ASA', { opts: ['ASA', 'PETG', 'PACF', 'ABS', 'PLA'] }],
   ['bed_mm', 'print', 'num', 220, { min: 100, max: 1000, step: 1, unit: 'mm' }],
-  ['detail', 'print', 'sel', 'medium', { opts: ['low', 'medium', 'high', 'ultra'] }],
+  ['detail', 'print', 'num', 40, { min: 10, max: 100, step: 10, unit: '%' }],
   ['bore', 'print', 'sel', 'bearings', { opts: ['bearings', 'profile', 'solid'] }],
   ['bearing', 'print', 'sel', 'auto', { opts: ['auto', '608', '6000', '6001', '6002', '6003', '6004', '6005'] }],
   ['bore_kind', 'print', 'sel', 'round', { opts: ['round', 'hex', 'd', 'square'] }],
   ['bore_mm', 'print', 'auto', '', { min: 3, max: 40, step: 0.5, unit: 'mm' }],
-  ['ties', 'print', 'num', 3, { min: 0, max: 6, step: 1 }],
-  ['tie_mm', 'print', 'num', 4, { min: 2, max: 12, step: 0.5, unit: 'mm' }],
+  ['ties', 'print', 'num', 0, { min: 0, max: 6, step: 1 }],
+  ['tie_mm', 'print', 'num', 3, { min: 2, max: 12, step: 0.5, unit: 'mm' }],
   ['rim', 'print', 'sel', 'auto', { opts: ['auto', 'yes', 'no'] }],
   ['nose', 'print', 'sel', 'yes', { opts: ['yes', 'no'] }],
   ['nose_shape', 'print', 'sel', 'ellipse', { opts: ['ellipse', 'ogive', 'cone'] }],
   ['nose_ratio', 'print', 'num', 0.8, { min: 0.6, max: 1.0, step: 0.05 }],
+  ['nose_gap_mm', 'print', 'num', 40, { min: 10, max: 100, step: 5, unit: 'mm' }],
 ];
 
-// ---- the dictionary: one block per language (researches/03 §4); a new language is one more block
+// ---- the dictionary (researches/03 §4). Russian: the strict academic register of the owner's word (ideas/04), technical
+// terms after GOST R 51990 / IEC 61400 usage («ветроэнергетическая установка», «коэффициент мощности»).
 const I18N = {
   ru: {
-    title: 'Калькулятор спиральной ветротурбины Архимеда',
-    lede: 'Опишите место и свой 3D-принтер — страница рассчитает спиральную турбину Архимеда KATAK: какую мощность и сколько энергии за год она даст, как быстро вращается, какой нужен вал и подшипник — и сгенерирует STL ротора и носа, подогнанный под ваше сопло.',
-    f1t: 'Чего ждать', f1: 'Печатная турбина 0,2–0,6 м — это единицы ватт: датчик, подсветка, учебный стенд. Домашнюю электростанцию она не заменит.',
-    f2t: 'На чём стоят числа', f2: 'Формулы и коэффициенты — из рецензируемых исследований спиральных турбин, а не из рекламы производителя. Источники — в папке researches/ проекта.',
-    f3t: 'Ваши данные', f3: 'Всё считается прямо в этом браузере: страница работает без интернета и ничего никуда не отправляет.',
-    n1: 'Место', n2: 'Турбина', n3: 'Печать', n4: 'Результат', n5: '3D и STL',
-    s1t: 'Где будет стоять турбина', s1p: 'Ветер у земли слабее, чем на метеостанции. Страница пересчитывает его на высоту турбины по типу местности.',
-    s2t: 'Какую турбину вы хотите', s2p: 'Задайте диаметр — или желаемую мощность, и страница подберёт диаметр сама. Остальное заполнено рекомендациями исследований; меняйте, если знаете зачем.',
-    s3t: 'Чем и на чём печатаете', s3p: 'Толщина лопасти подгоняется под целое число линий вашего сопла. Пустое поле — значение посчитает страница.',
-    s4t: 'Что получится', s4p: 'Числа — оценка по модели исследований; реальная турбина на крыше обычно даёт меньше.',
-    s5t: 'Модель и файлы для печати', s5p: 'Печатайте ротор осью вертикально, носом вниз. Нос — отдельная деталь, вершиной вверх.',
-    chartcap: 'Линия — электрическая мощность по скорости ветра; столбики — как часто дует такой ветер на вашем месте.',
-    viewcap: 'Тяните мышью — вращение, колесо — масштаб',
-    dlrotor: 'Скачать STL ротора', dlnose: 'Скачать STL носа',
-    foot1: 'KATAK — Krinik Archimedes Turbine Automated Kalculator. Модель: Cp(λ) по исследованиям спиральных турбин, нагрузки по IEC 61400-2.',
+    title: 'Расчёт спиральной ветроэнергетической установки Архимеда',
+    lede: 'Страница выполняет расчёт спиральной ветротурбины Архимеда KATAK по параметрам площадки и 3D-принтера. Результат включает среднюю мощность, годовую выработку электроэнергии, частоту вращения, крутящий момент, ветровую нагрузку, диаметр вала и типоразмер подшипника. По результатам расчёта формируются STL-файлы ротора и носового обтекателя, согласованные с диаметром сопла принтера.',
+    f1t: 'Ожидаемая мощность', f1: 'Печатный ротор диаметром от 0,2 до 0,6 м развивает мощность порядка единиц ватт. Такой мощности достаточно для питания датчика, светильника или учебного стенда.',
+    f2t: 'Исходные данные модели', f2: 'Зависимости и коэффициенты приняты по рецензируемым исследованиям спиральных турбин. Перечень источников приведён в каталоге researches/ проекта.',
+    f3t: 'Обработка данных', f3: 'Расчёт выполняется в браузере без подключения к сети. Введённые данные не передаются.',
+    n1: 'Площадка', n2: 'Ротор', n3: 'Печать', n4: 'Результаты', n5: 'Модель и STL',
+    s1t: 'Параметры площадки', s1p: 'Кривая показывает профиль средней скорости ветра по высоте для выбранного типа местности. Скорость, измеренная метеостанцией, пересчитывается на высоту установки по логарифмическому закону.',
+    s2t: 'Параметры ротора', s2p: 'Схема показывает ротор сбоку: огибающую лопастей, кромки трёх витков, ступицу и основные размеры. Параметры по умолчанию соответствуют рекомендациям исследований.',
+    s3t: 'Параметры печати', s3p: 'Схема показывает поперечное сечение стенки лопасти. Толщина стенки округляется вверх до целого числа экструзионных линий выбранного сопла.',
+    s4t: 'Результаты расчёта', s4p: 'Значения получены по расчётной модели. Фактическая выработка установки на кровле, как правило, ниже расчётной.',
+    s5t: 'Трёхмерная модель и файлы STL', s5p: 'Модель показывает установку: ротор на неподвижной оси, стойку переднего подшипника, носовой обтекатель перед стойкой и генератор за ротором. Ротор печатается с вертикальной осью носовой частью вниз; обтекатель печатается отдельно вершиной вверх.',
+    chartcap: 'Сплошная линия: электрическая мощность в зависимости от скорости ветра. Столбцы: плотность распределения скорости ветра на площадке. Штриховая линия: средняя скорость на высоте установки.',
+    viewcap: 'Вращение: перетаскивание мышью. Масштаб: колесо мыши.',
+    dlrotor: 'Скачать STL ротора', dlnose: 'Скачать STL обтекателя',
+    foot1: 'KATAK (Krinik Archimedes Turbine Automated Kalculator). Модель Cp(λ) по исследованиям спиральных турбин; нагрузки по IEC 61400-2.',
     auto: 'авто',
     f: {
-      v_ref: 'Средний ветер', z_ref: 'На высоте измерения', height_m: 'Высота турбины', terrain: 'Местность', site: 'Где стоит', alt_m: 'Высота над морем',
-      temp_c: 'Средняя температура', weibull_k: 'Форма распределения k', mode: 'Как задать размер', diameter_mm: 'Диаметр ротора',
-      target_w: 'Желаемая мощность', target_v: 'при ветре', blades: 'Лопастей', turns: 'Оборотов спирали', angle_mode: 'Профиль угла раскрытия',
-      alpha_deg: 'Угол раскрытия', ld: 'Длина / диаметр', hub_ratio: 'Ступица / диаметр', hand: 'Закрутка', cp_preset: 'Оценка КПД ротора',
-      nozzle_mm: 'Сопло', layer_mm: 'Высота слоя', wall_mm: 'Толщина лопасти', material: 'Пластик', bed_mm: 'Стол принтера', detail: 'Детализация модели',
-      bore: 'Ось', bearing: 'Подшипник', bore_kind: 'Профиль отверстия / оси', bore_mm: 'Диаметр отверстия / оси', ties: 'Стяжек между витками',
-      tie_mm: 'Диаметр стяжки', rim: 'Обод на выходе', nose: 'Нос', nose_shape: 'Форма носа', nose_ratio: 'Длина носа / диаметр',
+      v_ref: 'Средняя скорость ветра', z_ref: 'Высота измерения', height_m: 'Высота установки', terrain: 'Тип местности', site: 'Размещение',
+      alt_m: 'Высота над уровнем моря', temp_c: 'Среднегодовая температура', weibull_k: 'Параметр формы распределения Вейбулла k',
+      mode: 'Способ задания размера', diameter_mm: 'Диаметр ротора', target_w: 'Требуемая мощность', target_v: 'Расчётная скорость ветра',
+      blades: 'Число лопастей', turns: 'Число витков спирали', angle_mode: 'Закон угла раскрытия', alpha_deg: 'Угол раскрытия',
+      ld: 'Отношение длины к диаметру', hub_ratio: 'Отношение диаметра ступицы к диаметру ротора', hand: 'Направление закрутки',
+      cp_preset: 'Оценка коэффициента мощности', nozzle_mm: 'Диаметр сопла', layer_mm: 'Высота слоя', wall_mm: 'Толщина стенки лопасти',
+      material: 'Материал', bed_mm: 'Наибольший размер области печати', detail: 'Детализация модели', bore: 'Исполнение оси',
+      bearing: 'Подшипник', bore_kind: 'Профиль отверстия или оси', bore_mm: 'Диаметр отверстия или оси', ties: 'Число печатных стяжек',
+      tie_mm: 'Диаметр стяжки', rim: 'Обод на выходе', nose: 'Носовой обтекатель', nose_shape: 'Форма обтекателя',
+      nose_ratio: 'Отношение длины обтекателя к диаметру', nose_gap_mm: 'Расстояние от ротора до обтекателя',
     },
     h: {
-      v_ref: 'среднегодовой, с метеостанции или карты ветров', z_ref: 'у метеостанций обычно 10 м', terrain: 'шероховатость земли вокруг',
-      site: 'на крышах ветер рваный — выработка ниже', weibull_k: '2 — типичное распределение (Рэлей)', ld: 'пусто — по правилу зазора между лопастями',
-      cp_preset: 'реалистичная — медиана измерений', wall_mm: 'пусто — 0,8 % диаметра, не меньше 3 линий', layer_mm: 'пусто — половина сопла',
-      bearing: 'авто — по расчётному диаметру стального вала', bore_mm: 'пусто — под вал подшипника', bed_mm: 'наибольшая сторона по X/Y/Z',
-      ties: 'вертикальные стойки — печатаются без поддержек', rim: 'авто — с 400 мм',
+      v_ref: 'среднегодовое значение по данным метеостанции или ветрового атласа', z_ref: 'стандартная высота флюгера метеостанции 10 м',
+      terrain: 'задаёт длину шероховатости z₀ в логарифмическом профиле скорости', site: 'задаёт коэффициент выработки площадки f_site',
+      alt_m: 'определяет плотность воздуха по стандартной атмосфере', temp_c: 'определяет плотность воздуха',
+      weibull_k: 'значение 2 соответствует распределению Рэлея', ld: 'при пустом поле определяется по условию зазора между витками',
+      cp_preset: 'реалистичная оценка соответствует медиане измерений', wall_mm: 'при пустом поле 0,8 % диаметра, не менее трёх линий',
+      layer_mm: 'при пустом поле половина диаметра сопла', bearing: 'по расчётному диаметру стального вала',
+      bore_mm: 'при пустом поле равен внутреннему диаметру подшипника', bed_mm: 'наибольшая из сторон X, Y, Z',
+      ties: 'осевые стойки между витками; металлические шпильки будут добавлены в следующей версии', rim: 'автоматически при диаметре от 400 мм',
+      nose_gap_mm: 'между ротором и обтекателем располагается стойка переднего подшипника',
+      detail: '10 % соответствует грубой сетке, 100 % наиболее плотной; превью строится при 10 %',
     },
     o: {
-      sea: 'море', snow: 'снег, лёд, отмели', open: 'ровное поле, трава', crops: 'посевы, редкие препятствия', scattered: 'высокие посевы, деревья',
-      park: 'парк, кусты', suburb: 'пригород, лес', city: 'центр города',
-      field: 'открытое поле, мачта', rural: 'село, препятствия ниже турбины', roof_high: 'крыша, высоко над коньком', roof: 'обычная крыша', yard: 'двор, балкон',
-      diameter: 'по диаметру', power: 'по мощности', variable: 'переменный 30-45-60°', fixed: 'постоянный угол', '1': 'правая', '-1': 'левая',
-      realistic: 'реалистичная', optimistic: 'оптимистичная', pessimistic: 'пессимистичная',
-      low: 'низкая', medium: 'средняя', high: 'высокая', ultra: 'сверхвысокая',
-      bearings: 'металлический вал на подшипниках', profile: 'отверстие с профилем', solid: 'печатная ось',
-      ellipse: 'эллипсоид', ogive: 'оживало', cone: 'конус',
-      auto: 'авто', round: 'круг', hex: 'шестигранник', d: 'D-срез', square: 'квадрат', yes: 'да', no: 'нет',
-      ASA: 'ASA — для улицы', PETG: 'PETG — тень', PACF: 'PA-CF — прочный', ABS: 'ABS', PLA: 'PLA — только в помещении',
+      sea: 'морская поверхность', snow: 'снег, лёд, отмели', open: 'ровная открытая местность, трава', crops: 'посевы, редкие препятствия',
+      scattered: 'высокие посевы, отдельные деревья', park: 'парк, кустарник', suburb: 'пригород, лес', city: 'центр города',
+      field: 'открытая местность, мачта', rural: 'сельская местность, препятствия ниже установки', roof_high: 'кровля, установка выше конька',
+      roof: 'кровля здания', yard: 'двор, балкон', diameter: 'по диаметру', power: 'по требуемой мощности', variable: 'переменный, 30°, 45°, 60°',
+      fixed: 'постоянный', '1': 'правая', '-1': 'левая', realistic: 'реалистичная', optimistic: 'оптимистичная', pessimistic: 'пессимистичная',
+      low: 'низкая', medium: 'средняя', high: 'высокая', ultra: 'сверхвысокая', bearings: 'стальной вал на подшипниках',
+      profile: 'отверстие заданного профиля', solid: 'печатная ось', ellipse: 'эллипсоид', ogive: 'оживало', cone: 'конус',
+      auto: 'авто', round: 'круг', hex: 'шестигранник', d: 'D-образный срез', square: 'квадрат', yes: 'да', no: 'нет',
+      ASA: 'ASA, для наружной установки', PETG: 'PETG, для затенённых мест', PACF: 'PA-CF, повышенной прочности', ABS: 'ABS', PLA: 'PLA, только в помещении',
     },
     k: {
-      meanW: 'средняя мощность', aep: 'энергии за год', vHub: 'ветер на высоте турбины', rpm: 'оборотов при среднем ветре',
-      cp: 'КПД ротора Cp', lam: 'быстроходность λ', start: 'стартовый момент при 3 м/с', park: 'нагрузка на стоянке в бурю',
+      meanW: 'средняя мощность', aep: 'годовая выработка', vHub: 'скорость ветра на высоте установки', rpm: 'частота вращения при средней скорости',
+      cp: 'коэффициент мощности Cp', lam: 'коэффициент быстроходности λ', start: 'пусковой момент при 3 м/с', park: 'нагрузка на неподвижный ротор при урагане',
     },
     r: {
-      wall: 'Толщина лопасти', layer: 'Слой / ширина линии', ld: 'Длина / диаметр', len: 'Длина ротора', hub: 'Ступица', gap: 'Зазор между витками у носа',
-      size: 'Габарит печати', mass: 'Пластик (ротор + нос)', shaft: 'Стальной вал не тоньше', bearing: 'Подшипник', rpmRated: 'Обороты при 12,5 м/с',
-      run: 'Обороты разноса без нагрузки', stress: 'Напряжение на кромке при разносе', rho: 'Плотность воздуха', weibull: 'Вейбулл c / k',
-      wind: 'Энергия ветра через ротор', rated: 'Мощность при 12,5 м/с', cf: 'Коэффициент использования', nose: 'Нос',
-      lines: ['линия', 'линии', 'линий'],
+      wall: 'Толщина стенки лопасти', layer: 'Высота слоя и ширина линии', ld: 'Отношение длины к диаметру', len: 'Длина ротора', hub: 'Диаметр ступицы',
+      size: 'Габарит печати', mass: 'Масса пластика (ротор и обтекатель)', shaft: 'Минимальный диаметр стального вала', bearing: 'Подшипник',
+      rpmRated: 'Частота вращения при 12,5 м/с', run: 'Частота вращения разноса', stress: 'Напряжение на кромке при разносе',
+      rho: 'Плотность воздуха', weibull: 'Параметры Вейбулла c и k', wind: 'Мощность ветрового потока через ротор', rated: 'Мощность при 12,5 м/с',
+      cf: 'Коэффициент использования установленной мощности', nose: 'Обтекатель', lines: ['линия', 'линии', 'линий'],
+      height: 'высота, м', speed: 'скорость ветра, м/с', measured: 'измерение', install: 'установка', diameter: 'D', length: 'L',
+      nozzle: 'сопло', step: 'шаг', layerShort: 'слой',
     },
     w: {
-      ok: 'Геометрия проходит проверки: корень лопасти за носом, витки не касаются.',
-      'root-not-rising': 'Корень лопасти идёт вспять — увеличьте длину / диаметр.', 'root-before-nose': 'Корень лопасти выходит перед носом — увеличьте длину / диаметр.',
-      'blades-too-close': 'Витки у носа слишком близко — увеличьте длину / диаметр или уменьшите стенку.',
-      bed: 'Модель больше стола принтера — печатайте по частям или уменьшите диаметр.', overhang: 'Нависание у выхода {a}° — больше 55°: нужны древовидные поддержки.',
-      material: 'Этот пластик не для улицы (солнце, УФ) — для турбины на открытом воздухе берите ASA.', stress: 'При разносе напряжение на кромке выше допустимого — нужен электрический тормоз.',
-      thick: 'Стенка толще 1,5 % диаметра — ротор теряет КПД.', big: 'Ротор больше 1 м печатают только как прототип; серийные — из стеклопластика.',
-      roof: 'На крыше выработка обычно в 3 раза ниже, чем на мачте в поле, — это уже учтено.', power: 'Для {w} Вт при {v} м/с нужен ротор ≈ {d} мм.',
-      shear: 'Ветер на высоте турбины {v} м/с против {r} м/с на высоте измерения.',
+      ok: 'Геометрия удовлетворяет проверкам: корневая кромка лопасти расположена за носовой частью, зазор между витками достаточен.',
+      'root-not-rising': 'Корневая кромка лопасти смещается против потока. Следует увеличить отношение длины к диаметру.',
+      'root-before-nose': 'Корневая кромка лопасти выходит вперёд носовой части. Следует увеличить отношение длины к диаметру.',
+      'blades-too-close': 'Зазор между витками у носовой части меньше трёх толщин стенки. Следует увеличить отношение длины к диаметру или уменьшить толщину стенки.',
+      bed: 'Габарит модели превышает область печати. Следует уменьшить диаметр либо печатать ротор по частям.',
+      overhang: 'Угол нависания у выходной кромки равен {a}° и превышает 55°. Для печати требуются древовидные поддержки.',
+      material: 'Выбранный материал не предназначен для наружной установки. Для эксплуатации под солнцем рекомендуется ASA.',
+      stress: 'Напряжение на кромке при разносе превышает допускаемое. Установка требует электрического торможения.',
+      thick: 'Толщина стенки превышает 1,5 % диаметра, что снижает коэффициент мощности.',
+      big: 'Ротор диаметром более 1 м печатается только как прототип; серийные роторы изготавливаются из стеклопластика.',
+      roof: 'Размещение на кровле снижает выработку примерно втрое по сравнению с мачтой на открытой местности. Снижение учтено в расчёте.',
+      power: 'Для мощности {w} Вт при скорости ветра {v} м/с требуется ротор диаметром около {d} мм.',
+      shear: 'Скорость ветра на высоте установки составляет {v} м/с при {r} м/с на высоте измерения.',
     },
-    u: { 'm/s': 'м/с', m: 'м', mm: 'мм', W: 'Вт', '°C': '°C', '°': '°', rpm: 'об/мин', N: 'Н', g: 'г', kWh: 'кВт·ч', mNm: 'мН·м', MPa: 'МПа', 'kg/m³': 'кг/м³', Wm: 'Вт' },
+    u: { 'm/s': 'м/с', m: 'м', mm: 'мм', W: 'Вт', '°C': '°C', '°': '°', rpm: 'об/мин', N: 'Н', g: 'г', kWh: 'кВт·ч', mNm: 'мН·м', MPa: 'МПа', 'kg/m³': 'кг/м³' },
   },
   en: {
-    title: 'Archimedes spiral wind turbine calculator',
-    lede: 'Describe your site and your 3D printer — the page sizes a KATAK Archimedes spiral turbine: how much power and energy per year it gives, how fast it spins, which shaft and bearing it needs — and generates the STL of the rotor and the nose, fitted to your nozzle.',
-    f1t: 'What to expect', f1: 'A printed turbine of 0.2–0.6 m gives single watts: a sensor, a light, a classroom rig. It does not replace a home power plant.',
-    f2t: 'Where the numbers come from', f2: 'Formulas and coefficients come from peer-reviewed studies of spiral turbines, not from the manufacturer\'s brochure. Sources are in the project\'s researches/ folder.',
-    f3t: 'Your data', f3: 'Everything is computed in this browser: the page works offline and sends nothing anywhere.',
-    n1: 'Site', n2: 'Turbine', n3: 'Printing', n4: 'Result', n5: '3D and STL',
-    s1t: 'Where the turbine will stand', s1p: 'Wind near the ground is weaker than at a weather station. The page brings it to the turbine height by the terrain type.',
-    s2t: 'Which turbine you want', s2p: 'Set the diameter — or the power you want, and the page picks the diameter. The rest holds the recommendations of the studies; change them if you know why.',
-    s3t: 'What you print with', s3p: 'The blade thickness is fitted to a whole number of your nozzle\'s lines. An empty field is computed by the page.',
-    s4t: 'What you get', s4p: 'The numbers are a model estimate from the studies; a real turbine on a roof usually gives less.',
-    s5t: 'Model and print files', s5p: 'Print the rotor with its axis vertical, nose down. The nose is a separate part, tip up.',
-    chartcap: 'Line — electrical power by wind speed; bars — how often such wind blows at your site.',
-    viewcap: 'Drag to rotate, wheel to zoom',
-    dlrotor: 'Download rotor STL', dlnose: 'Download nose STL',
-    foot1: 'KATAK — Krinik Archimedes Turbine Automated Kalculator. Model: Cp(λ) from spiral turbine studies, loads after IEC 61400-2.',
+    title: 'Design calculation of an Archimedes spiral wind turbine',
+    lede: 'The page performs the design calculation of a KATAK Archimedes spiral wind turbine from the parameters of the site and of the 3D printer. The result comprises the mean power, the annual energy yield, the rotational speed, the torque, the wind load, the shaft diameter and the bearing size. From the result the page generates the STL files of the rotor and of the nose fairing, matched to the nozzle diameter of the printer.',
+    f1t: 'Expected power', f1: 'A printed rotor of 0.2 to 0.6 m in diameter develops a power of the order of a few watts. This power suffices for a sensor, a lamp or a laboratory rig.',
+    f2t: 'Model data', f2: 'The relations and coefficients are taken from peer-reviewed studies of spiral turbines. The list of sources is given in the researches/ folder of the project.',
+    f3t: 'Data handling', f3: 'The calculation runs in the browser without a network connection. The entered data are not transmitted.',
+    n1: 'Site', n2: 'Rotor', n3: 'Printing', n4: 'Results', n5: 'Model and STL',
+    s1t: 'Site parameters', s1p: 'The curve shows the profile of the mean wind speed over height for the selected terrain. The speed measured by the weather station is transferred to the installation height by the logarithmic law.',
+    s2t: 'Rotor parameters', s2p: 'The diagram shows the rotor from the side: the blade envelope, the edges of the turns, the hub and the main dimensions. The default parameters follow the recommendations of the studies.',
+    s3t: 'Printing parameters', s3p: 'The diagram shows the cross-section of the blade wall. The wall thickness is rounded up to a whole number of extrusion lines of the selected nozzle.',
+    s4t: 'Results', s4p: 'The values are model estimates. The actual yield of a roof installation is, as a rule, lower than the estimate.',
+    s5t: 'Three-dimensional model and STL files', s5p: 'The model shows the installation: the rotor on a fixed axle, the front bearing stand, the nose fairing ahead of the stand and the generator behind the rotor. The rotor is printed with a vertical axis, nose down; the fairing is printed separately, tip up.',
+    chartcap: 'Solid line: electrical power as a function of wind speed. Bars: probability density of the wind speed at the site. Dashed line: mean speed at the installation height.',
+    viewcap: 'Rotation: drag with the mouse. Zoom: mouse wheel.',
+    dlrotor: 'Download rotor STL', dlnose: 'Download fairing STL',
+    foot1: 'KATAK (Krinik Archimedes Turbine Automated Kalculator). Cp(λ) model from studies of spiral turbines; loads after IEC 61400-2.',
     auto: 'auto',
     f: {
-      v_ref: 'Mean wind', z_ref: 'Measured at height', height_m: 'Turbine height', terrain: 'Terrain', site: 'Placement', alt_m: 'Altitude',
-      temp_c: 'Mean temperature', weibull_k: 'Distribution shape k', mode: 'Size by', diameter_mm: 'Rotor diameter',
-      target_w: 'Wanted power', target_v: 'at wind', blades: 'Blades', turns: 'Spiral turns', angle_mode: 'Opening angle profile',
-      alpha_deg: 'Opening angle', ld: 'Length / diameter', hub_ratio: 'Hub / diameter', hand: 'Winding', cp_preset: 'Rotor efficiency estimate',
-      nozzle_mm: 'Nozzle', layer_mm: 'Layer height', wall_mm: 'Blade thickness', material: 'Plastic', bed_mm: 'Printer bed', detail: 'Model detail',
-      bore: 'Axle', bearing: 'Bearing', bore_kind: 'Hole / axle profile', bore_mm: 'Hole / axle diameter', ties: 'Ties between turns',
-      tie_mm: 'Tie diameter', rim: 'Exit rim', nose: 'Nose', nose_shape: 'Nose shape', nose_ratio: 'Nose length / diameter',
+      v_ref: 'Mean wind speed', z_ref: 'Measurement height', height_m: 'Installation height', terrain: 'Terrain type', site: 'Placement',
+      alt_m: 'Altitude above sea level', temp_c: 'Mean annual temperature', weibull_k: 'Weibull shape parameter k',
+      mode: 'Sizing method', diameter_mm: 'Rotor diameter', target_w: 'Required power', target_v: 'Design wind speed',
+      blades: 'Number of blades', turns: 'Number of spiral turns', angle_mode: 'Opening angle law', alpha_deg: 'Opening angle',
+      ld: 'Length-to-diameter ratio', hub_ratio: 'Hub-to-rotor diameter ratio', hand: 'Winding direction',
+      cp_preset: 'Power coefficient estimate', nozzle_mm: 'Nozzle diameter', layer_mm: 'Layer height', wall_mm: 'Blade wall thickness',
+      material: 'Material', bed_mm: 'Largest build dimension', detail: 'Model detail', bore: 'Axle arrangement',
+      bearing: 'Bearing', bore_kind: 'Hole or axle profile', bore_mm: 'Hole or axle diameter', ties: 'Number of printed ties',
+      tie_mm: 'Tie diameter', rim: 'Exit rim', nose: 'Nose fairing', nose_shape: 'Fairing shape',
+      nose_ratio: 'Fairing length-to-diameter ratio', nose_gap_mm: 'Distance from rotor to fairing',
     },
     h: {
-      v_ref: 'annual mean, from a weather station or a wind map', z_ref: 'weather stations usually measure at 10 m', terrain: 'ground roughness around',
-      site: 'wind is gusty on roofs — less energy', weibull_k: '2 is the typical distribution (Rayleigh)', ld: 'empty — by the blade-gap rule',
-      cp_preset: 'realistic — the median of measurements', wall_mm: 'empty — 0.8 % of the diameter, at least 3 lines', layer_mm: 'empty — half the nozzle',
-      bearing: 'auto — by the computed steel shaft diameter', bore_mm: 'empty — fits the bearing\'s shaft', bed_mm: 'the largest side X/Y/Z',
-      ties: 'vertical posts — print without supports', rim: 'auto — from 400 mm',
+      v_ref: 'annual mean from a weather station or a wind atlas', z_ref: 'the standard vane height of a weather station is 10 m',
+      terrain: 'sets the roughness length z₀ of the logarithmic speed profile', site: 'sets the site yield factor f_site',
+      alt_m: 'determines the air density by the standard atmosphere', temp_c: 'determines the air density',
+      weibull_k: 'the value 2 corresponds to the Rayleigh distribution', ld: 'when empty, follows from the gap condition between the turns',
+      cp_preset: 'the realistic estimate corresponds to the median of measurements', wall_mm: 'when empty, 0.8 % of the diameter, at least three lines',
+      layer_mm: 'when empty, half the nozzle diameter', bearing: 'from the computed steel shaft diameter',
+      bore_mm: 'when empty, equals the bearing bore', bed_mm: 'the largest of the X, Y, Z sides',
+      ties: 'axial posts between the turns; metal threaded rods will follow in the next version', rim: 'automatic from 400 mm in diameter',
+      nose_gap_mm: 'the front bearing stand stands between the rotor and the fairing',
+      detail: '10 % gives the coarsest mesh, 100 % the densest; the preview uses 10 %',
     },
     o: {
-      sea: 'sea', snow: 'snow, ice, mud flats', open: 'flat field, grass', crops: 'crops, few obstacles', scattered: 'tall crops, trees',
-      park: 'park, bushes', suburb: 'suburb, forest', city: 'city centre',
-      field: 'open field, mast', rural: 'village, obstacles below the turbine', roof_high: 'roof, high above the ridge', roof: 'typical roof', yard: 'yard, balcony',
-      diameter: 'diameter', power: 'power', variable: 'variable 30-45-60°', fixed: 'fixed angle', '1': 'right', '-1': 'left',
-      realistic: 'realistic', optimistic: 'optimistic', pessimistic: 'pessimistic',
-      low: 'low', medium: 'medium', high: 'high', ultra: 'ultra',
-      bearings: 'steel shaft on bearings', profile: 'profiled hole', solid: 'printed axle',
-      ellipse: 'ellipsoid', ogive: 'ogive', cone: 'cone',
+      sea: 'sea surface', snow: 'snow, ice, mud flats', open: 'flat open terrain, grass', crops: 'crops, few obstacles',
+      scattered: 'tall crops, scattered trees', park: 'park, shrubs', suburb: 'suburb, forest', city: 'city centre',
+      field: 'open terrain, mast', rural: 'rural area, obstacles below the installation', roof_high: 'roof, installation above the ridge',
+      roof: 'building roof', yard: 'yard, balcony', diameter: 'by diameter', power: 'by required power', variable: 'variable, 30°, 45°, 60°',
+      fixed: 'constant', '1': 'right-hand', '-1': 'left-hand', realistic: 'realistic', optimistic: 'optimistic', pessimistic: 'pessimistic',
+      low: 'low', medium: 'medium', high: 'high', ultra: 'ultra', bearings: 'steel shaft on bearings',
+      profile: 'hole of a given profile', solid: 'printed axle', ellipse: 'ellipsoid', ogive: 'ogive', cone: 'cone',
       auto: 'auto', round: 'round', hex: 'hexagon', d: 'D-cut', square: 'square', yes: 'yes', no: 'no',
-      ASA: 'ASA — outdoors', PETG: 'PETG — shade', PACF: 'PA-CF — strong', ABS: 'ABS', PLA: 'PLA — indoors only',
+      ASA: 'ASA, for outdoor use', PETG: 'PETG, for shaded places', PACF: 'PA-CF, high strength', ABS: 'ABS', PLA: 'PLA, indoors only',
     },
     k: {
-      meanW: 'mean power', aep: 'energy per year', vHub: 'wind at the turbine', rpm: 'rpm at mean wind',
-      cp: 'rotor efficiency Cp', lam: 'tip speed ratio λ', start: 'starting torque at 3 m/s', park: 'storm load when parked',
+      meanW: 'mean power', aep: 'annual energy yield', vHub: 'wind speed at installation height', rpm: 'rotational speed at mean wind',
+      cp: 'power coefficient Cp', lam: 'tip speed ratio λ', start: 'starting torque at 3 m/s', park: 'load on the parked rotor in a storm',
     },
     r: {
-      wall: 'Blade thickness', layer: 'Layer / line width', ld: 'Length / diameter', len: 'Rotor length', hub: 'Hub', gap: 'Gap between turns at the nose',
-      size: 'Print size', mass: 'Plastic (rotor + nose)', shaft: 'Steel shaft at least', bearing: 'Bearing', rpmRated: 'rpm at 12.5 m/s',
-      run: 'Runaway rpm without load', stress: 'Tip stress at runaway', rho: 'Air density', weibull: 'Weibull c / k',
-      wind: 'Wind energy through the rotor', rated: 'Power at 12.5 m/s', cf: 'Capacity factor', nose: 'Nose',
-      lines: ['line', 'lines', 'lines'],
+      wall: 'Blade wall thickness', layer: 'Layer height and line width', ld: 'Length-to-diameter ratio', len: 'Rotor length', hub: 'Hub diameter',
+      size: 'Build size', mass: 'Plastic mass (rotor and fairing)', shaft: 'Minimum steel shaft diameter', bearing: 'Bearing',
+      rpmRated: 'Rotational speed at 12.5 m/s', run: 'Runaway rotational speed', stress: 'Tip stress at runaway',
+      rho: 'Air density', weibull: 'Weibull parameters c and k', wind: 'Wind power through the rotor', rated: 'Power at 12.5 m/s',
+      cf: 'Capacity factor', nose: 'Fairing', lines: ['line', 'lines', 'lines'],
+      height: 'height, m', speed: 'wind speed, m/s', measured: 'measurement', install: 'installation', diameter: 'D', length: 'L',
+      nozzle: 'nozzle', step: 'pitch', layerShort: 'layer',
     },
     w: {
-      ok: 'The geometry passes the checks: the blade root stays behind the nose, the turns do not touch.',
-      'root-not-rising': 'The blade root runs backwards — increase length / diameter.', 'root-before-nose': 'The blade root starts before the nose — increase length / diameter.',
-      'blades-too-close': 'The turns are too close at the nose — increase length / diameter or reduce the wall.',
-      bed: 'The model is larger than the printer bed — print in parts or reduce the diameter.', overhang: 'Overhang at the exit {a}° — over 55°: tree supports needed.',
-      material: 'This plastic is not for outdoors (sun, UV) — use ASA for a turbine in the open.', stress: 'At runaway the tip stress exceeds the allowed — an electric brake is needed.',
-      thick: 'The wall is thicker than 1.5 % of the diameter — the rotor loses efficiency.', big: 'Rotors over 1 m are printed only as prototypes; production ones are fibreglass.',
-      roof: 'On a roof the energy is usually 3× lower than on a mast in a field — already accounted for.', power: 'For {w} W at {v} m/s the rotor needs ≈ {d} mm.',
-      shear: 'Wind at the turbine height {v} m/s vs {r} m/s at the measuring height.',
+      ok: 'The geometry satisfies the checks: the blade root edge lies behind the nose, the gap between the turns is sufficient.',
+      'root-not-rising': 'The blade root edge moves against the flow. Increase the length-to-diameter ratio.',
+      'root-before-nose': 'The blade root edge starts ahead of the nose. Increase the length-to-diameter ratio.',
+      'blades-too-close': 'The gap between the turns at the nose is below three wall thicknesses. Increase the length-to-diameter ratio or reduce the wall.',
+      bed: 'The model exceeds the build volume. Reduce the diameter or print the rotor in parts.',
+      overhang: 'The overhang angle at the exit edge is {a}° and exceeds 55°. Tree supports are required for printing.',
+      material: 'The selected material is not intended for outdoor use. ASA is recommended for operation in the sun.',
+      stress: 'The tip stress at runaway exceeds the allowable value. The installation requires electrical braking.',
+      thick: 'The wall exceeds 1.5 % of the diameter, which lowers the power coefficient.',
+      big: 'A rotor over 1 m in diameter is printed only as a prototype; production rotors are made of glass fibre.',
+      roof: 'A roof placement lowers the yield about threefold compared with a mast in open terrain. The reduction is included in the calculation.',
+      power: 'A power of {w} W at a wind speed of {v} m/s requires a rotor of about {d} mm in diameter.',
+      shear: 'The wind speed at the installation height is {v} m/s for {r} m/s at the measurement height.',
     },
-    u: { 'm/s': 'm/s', m: 'm', mm: 'mm', W: 'W', '°C': '°C', '°': '°', rpm: 'rpm', N: 'N', g: 'g', kWh: 'kWh', mNm: 'mN·m', MPa: 'MPa', 'kg/m³': 'kg/m³', Wm: 'W' },
+    u: { 'm/s': 'm/s', m: 'm', mm: 'mm', W: 'W', '°C': '°C', '°': '°', rpm: 'rpm', N: 'N', g: 'g', kWh: 'kWh', mNm: 'mN·m', MPa: 'MPa', 'kg/m³': 'kg/m³' },
   },
 };
 let lang = 'ru';
@@ -856,6 +913,7 @@ const unit = (u) => T().u[u] ?? u;
 const plural = (n, forms) => { const r = new Intl.PluralRules(lang).select(n); return forms[r === 'one' ? 0 : r === 'few' ? 1 : lang === 'ru' ? 2 : 1]; };
 
 // ---- the form, built from FIELDS
+const state = {};
 function buildForms() {
   for (const box of document.querySelectorAll('[data-form]')) box.innerHTML = '';
   for (const [id, form, type, def, o] of FIELDS) {
@@ -880,7 +938,6 @@ function buildForms() {
     box.append(wrap);
   }
 }
-const state = {};
 const num = (id) => { const v = state[id] ?? FIELDS.find((f) => f[0] === id)[3]; return v === '' || v == null ? null : Number(v); };
 const str = (id) => String(state[id] ?? FIELDS.find((f) => f[0] === id)[3]);
 
@@ -897,7 +954,8 @@ function showModeFields() {
   vis('diameter_mm', !byPower); vis('target_w', byPower); vis('target_v', byPower);
   vis('alpha_deg', str('angle_mode') === 'fixed');
   const b = str('bore'); vis('bearing', b === 'bearings'); vis('bore_kind', b !== 'bearings');
-  const nose = str('nose') === 'yes'; vis('nose_shape', nose); vis('nose_ratio', nose);
+  vis('tie_mm', num('ties') > 0);
+  const nose = str('nose') === 'yes'; vis('nose_shape', nose); vis('nose_ratio', nose); vis('nose_gap_mm', nose);
 }
 
 // ---- the calculation
@@ -906,15 +964,15 @@ function compute() {
   const s = { ...KATAK.SITE_DEFAULTS };
   for (const k of ['v_ref', 'z_ref', 'height_m', 'alt_m', 'temp_c', 'weibull_k']) s[k] = num(k);
   s.terrain = str('terrain'); s.site = str('site'); s.material = str('material'); s.cp_preset = str('cp_preset');
-  let D = num('diameter_mm');
-  let powerNote = null;
+  let D = num('diameter_mm'), powerNote = null;
   if (str('mode') === 'power') { D = Math.round(Math.min(1500, Math.max(100, KATAK.diameterForPower(num('target_w'), num('target_v'), s))) / 10) * 10; powerNote = D; }
   const g = {
     diameter_mm: D, blades: Number(str('blades')), turns: num('turns'), angle_mode: str('angle_mode'), alpha_deg: num('alpha_deg'),
     ld: num('ld'), hub_ratio: num('hub_ratio'), hand: Number(str('hand')),
-    nozzle_mm: Number(str('nozzle_mm')), layer_mm: num('layer_mm'), wall_mm: num('wall_mm'), detail: str('detail'),
+    nozzle_mm: Number(str('nozzle_mm')), layer_mm: num('layer_mm'), wall_mm: num('wall_mm'), detail: num('detail'),
     bore: str('bore'), bore_kind: str('bore_kind'), ties: num('ties'), tie_mm: num('tie_mm'),
-    rim: str('rim') === 'auto' ? D >= 400 : str('rim') === 'yes', nose: str('nose') === 'yes', nose_shape: str('nose_shape'), nose_ratio: num('nose_ratio'),
+    rim: str('rim') === 'auto' ? D >= 400 : str('rim') === 'yes', nose: str('nose') === 'yes', nose_shape: str('nose_shape'),
+    nose_ratio: num('nose_ratio'), nose_gap_mm: num('nose_gap_mm'),
   };
   // first pass → the steel shaft and the bearing it needs; the bearing then shapes the hub (its seats and outer diameter)
   let geo = KATAK.resolve(g), ph = KATAK.physics(s, geo);
@@ -922,7 +980,7 @@ function compute() {
   if (g.bore === 'bearings') Object.assign(g, { bore_mm: pick.d, bearing_od_mm: pick.D, bearing_w_mm: pick.B });
   else g.bore_mm = num('bore_mm') ?? pick.d;
   geo = KATAK.resolve(g); ph = KATAK.physics(s, geo);
-  last = { s, g, geo, ph, bearing: pick, powerNote };
+  last = { s, g, geo, ph, bearing: pick, powerNote, build: last && last.build, checks: last && last.checks };
   render();
   schedulePreview();
 }
@@ -931,16 +989,15 @@ function compute() {
 function kpi(v, u, l, hero = false) { return `<div class="kpi${hero ? ' hero' : ''}"><span class="v">${v}<small>${u}</small></span><span class="l">${l}</span></div>`; }
 function rows(list) { return list.map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join(''); }
 function render() {
-  const { s, geo, ph, bearing } = last, p = geo.p, t = T(), m = ph.model;
+  const { geo, ph, bearing } = last, p = geo.p, t = T(), m = ph.model;
   $('#kpis').innerHTML = [
     kpi(fmt(ph.meanW, ph.meanW < 10 ? 2 : 1), unit('W'), t.k.meanW, true), kpi(fmt(ph.aep, ph.aep < 10 ? 1 : 0), unit('kWh'), t.k.aep, true),
     kpi(fmt(ph.vHub, 1), unit('m/s'), t.k.vHub), kpi(fmt(ph.rpm.mean), unit('rpm'), t.k.rpm),
     kpi(fmt(m.cpMax, 3), '', t.k.cp), kpi(fmt(m.lamOpt, 2), '', t.k.lam),
     kpi(fmt(ph.torque.start * 1000, 1), unit('mNm'), t.k.start), kpi(fmt(ph.loads.park), unit('N'), t.k.park),
   ].join('');
-  const d = geo.p, R = d.diameter_mm;
   $('#geo-spec').innerHTML = rows([
-    [t.r.ld, fmt(p.ld, 2)], [t.r.len, `${fmt(p.ld * R)} ${unit('mm')}`], [t.r.hub, `${fmt(p.hub_od_mm, 1)} ${unit('mm')}`],
+    [t.r.ld, fmt(p.ld, 2)], [t.r.len, `${fmt(p.ld * p.diameter_mm)} ${unit('mm')}`], [t.r.hub, `${fmt(p.hub_od_mm, 1)} ${unit('mm')}`],
     [t.r.rho, `${fmt(ph.rho, 3)} ${unit('kg/m³')}`], [t.r.weibull, `${fmt(ph.c, 2)} / ${fmt(ph.k, 1)}`],
   ]);
   $('#print-spec').innerHTML = rows([
@@ -960,15 +1017,13 @@ function render() {
     if (b.nose) extra.push([t.r.nose, `⌀${fmt(b.nose.base_mm, 1)} × ${fmt(b.nose.length_mm, 1)} ${unit('mm')}`]);
   }
   $('#res-spec').innerHTML = rows(extra);
-  renderWarnings();
-  renderChart();
+  renderWarnings(); renderChart(); vizSite(); vizRotor(); vizPrint();
 }
 function renderWarnings() {
   const { s, geo, ph, powerNote } = last, t = T(), p = geo.p, list = [];
-  const fill = (str, o) => str.replace(/\{(\w+)\}/g, (_, k) => o[k]);
+  const fill = (x, o) => x.replace(/\{(\w+)\}/g, (_, k) => o[k]);
   if (powerNote) list.push(['ok', fill(t.w.power, { w: fmt(num('target_w'), 1), v: fmt(num('target_v'), 1), d: fmt(powerNote) })]);
   list.push(['ok', fill(t.w.shear, { v: fmt(ph.vHub, 1), r: fmt(s.v_ref, 1) })]);
-  const cw = geo.p && last.checks;
   for (const w of (last.checks || [])) list.push(['bad', t.w[w] || w]);
   if (!(last.checks || []).length) list.push(['ok', t.w.ok]);
   const aExit = p.angle_mode === 'variable' ? 60 : p.alpha_deg;
@@ -981,6 +1036,7 @@ function renderWarnings() {
   if (last.build && Math.max(...last.build.size) > num('bed_mm')) list.push(['bad', t.w.bed]);
   $('#warnings').innerHTML = list.map(([c, txt]) => `<li class="${c}">${txt}</li>`).join('');
 }
+const axisStyle = 'stroke="#3A2633"';
 function renderChart() {
   const { ph } = last, W = 640, H = 300, L = 46, B = 30, top = 14, right = 14;
   const vMax = 20, pts = ph.curve.filter((c) => c.v <= vMax);
@@ -989,11 +1045,69 @@ function renderChart() {
   let svg = '';
   for (const c of pts) { const h = (H - B - top) * 0.9 * c.f / fMax; svg += `<rect x="${x(c.v) - 6}" y="${H - B - h}" width="12" height="${h}" fill="#FF5FB0" opacity=".22"/>`; }
   svg += `<path d="${pts.map((c, i) => `${i ? 'L' : 'M'}${x(c.v).toFixed(1)} ${y(c.pe).toFixed(1)}`).join(' ')}" fill="none" stroke="#FF1A8C" stroke-width="3"/>`;
-  for (let v = 0; v <= vMax; v += 5) svg += `<line x1="${x(v)}" y1="${H - B}" x2="${x(v)}" y2="${top}" stroke="#3A2633"/><text x="${x(v)}" y="${H - 10}" text-anchor="middle">${v}</text>`;
+  for (let v = 0; v <= vMax; v += 5) svg += `<line x1="${x(v)}" y1="${H - B}" x2="${x(v)}" y2="${top}" ${axisStyle}/><text x="${x(v)}" y="${H - 10}" text-anchor="middle">${v}</text>`;
   for (let i = 0; i <= 4; i++) { const pw = pMax * 1.1 * i / 4; svg += `<text x="${L - 6}" y="${y(pw) + 4}" text-anchor="end">${fmt(pw, pMax < 10 ? 1 : 0)}</text>`; }
   svg += `<line x1="${x(ph.vHub)}" y1="${top}" x2="${x(ph.vHub)}" y2="${H - B}" stroke="#F4EEF2" stroke-dasharray="4 4"/>`;
   svg += `<text x="${W - right}" y="${H - B - 6}" text-anchor="end">${unit('m/s')}</text><text x="${L}" y="${top + 2}">${unit('W')}</text>`;
   $('#chart').innerHTML = svg;
+}
+
+// ---- step 1: the wind speed profile over height for the chosen terrain (the same law the calculation uses)
+function vizSite() {
+  const { s, ph } = last, t = T(), W = 520, H = 300, L = 52, B = 34, top = 14, right = 16;
+  const zMax = Math.max(12, 1.5 * Math.max(s.z_ref, s.height_m));
+  const vAt = (z) => KATAK.windAt(s.v_ref, s.z_ref, z, ph.z0);
+  const vMax = Math.max(vAt(zMax), s.v_ref) * 1.15;
+  const x = (v) => L + (W - L - right) * v / vMax, y = (z) => H - B - (H - B - top) * z / zMax;
+  const pts = []; for (let i = 1; i <= 80; i++) { const z = zMax * i / 80; pts.push([x(Math.max(0, vAt(z))), y(z)]); }
+  let svg = `<line x1="${L}" y1="${H - B}" x2="${W - right}" y2="${H - B}" ${axisStyle}/><line x1="${L}" y1="${top}" x2="${L}" y2="${H - B}" ${axisStyle}/>`;
+  for (let i = 0; i <= 4; i++) { const v = vMax * i / 4; svg += `<text x="${x(v)}" y="${H - 14}" text-anchor="middle">${fmt(v, 1)}</text>`; }
+  for (let i = 0; i <= 4; i++) { const z = zMax * i / 4; svg += `<text x="${L - 6}" y="${y(z) + 4}" text-anchor="end">${fmt(z)}</text>`; }
+  svg += `<path d="M${pts.map((p) => p.map((c) => c.toFixed(1)).join(' ')).join(' L')}" fill="none" stroke="#FF1A8C" stroke-width="3"/>`;
+  const mark = (z, v, label, col) => `<line x1="${L}" y1="${y(z)}" x2="${x(v)}" y2="${y(z)}" stroke="${col}" stroke-dasharray="4 4"/><circle cx="${x(v)}" cy="${y(z)}" r="5" fill="${col}"/>` +
+    `<text x="${x(v) + 9}" y="${y(z) + 4}" fill="${col}">${label}: ${fmt(v, 2)} ${unit('m/s')}</text>`;
+  svg += mark(s.z_ref, s.v_ref, t.r.measured, '#A99AA3') + mark(s.height_m, ph.vHub, t.r.install, '#FF5FB0');
+  svg += `<text x="${W - right}" y="${H - B - 6}" text-anchor="end">${t.r.speed}</text><text x="${L + 6}" y="${top + 10}">${t.r.height} · z₀ = ${fmt(ph.z0, 4)} ${unit('m')}</text>`;
+  $('#viz-site').innerHTML = svg;
+}
+// ---- step 2: the rotor from the side (KATAK.sideView — the same geometry as the STL), with D and L
+function vizRotor() {
+  const sv = KATAK.sideView(last.g), t = T(), W = 520, H = 300, pad = 40;
+  const zMin = -sv.hubFront - 10, zMax = sv.Ls + sv.hubBack + 10, k = Math.min((W - 2 * pad) / (zMax - zMin), (H - 2 * pad) / (2 * sv.R));
+  const X = (z) => pad + (z - zMin) * k, Y = (r) => H / 2 - r * k;
+  let svg = `<line x1="${X(zMin)}" y1="${Y(0)}" x2="${X(zMax)}" y2="${Y(0)}" stroke="#A99AA3" stroke-dasharray="8 4 2 4"/>`;
+  svg += `<rect x="${X(-sv.hubFront)}" y="${Y(sv.rh)}" width="${(sv.Ls + sv.hubBack + sv.hubFront) * k}" height="${2 * sv.rh * k}" fill="#3A2633" stroke="#A99AA3"/>`;
+  const env = (sgn) => sv.env.map(([z, r], i) => `${i ? 'L' : 'M'}${X(z).toFixed(1)} ${Y(sgn * r).toFixed(1)}`).join(' ');
+  svg += `<path d="${env(1)}" fill="none" stroke="#FF5FB0" stroke-width="1.5" opacity=".6"/><path d="${env(-1)}" fill="none" stroke="#FF5FB0" stroke-width="1.5" opacity=".6"/>`;
+  for (const e of sv.edges) {
+    let d = '', prev = null;
+    for (const [z, x, front] of e) { const cmd = prev === front ? 'L' : 'M'; d += `${cmd}${X(z).toFixed(1)} ${Y(x).toFixed(1)} `; prev = front; }
+    const segs = []; let cur = []; let f0 = e[0][2];
+    for (const [z, x, front] of e) { if (front !== f0) { segs.push([cur, f0]); cur = [cur[cur.length - 1]]; f0 = front; } cur.push([z, x]); }
+    segs.push([cur, f0]);
+    for (const [pts, front] of segs) svg += `<path d="${pts.map(([z, x], i) => `${i ? 'L' : 'M'}${X(z).toFixed(1)} ${Y(x).toFixed(1)}`).join(' ')}" fill="none" stroke="#FF1A8C" stroke-width="${front ? 2.6 : 1.2}" opacity="${front ? 1 : 0.35}"/>`;
+  }
+  const xd = X(sv.Ls) + 14, yb = Y(-sv.R) + 18;
+  svg += `<line x1="${xd}" y1="${Y(sv.R)}" x2="${xd}" y2="${Y(-sv.R)}" stroke="#F4EEF2"/><text x="${xd + 6}" y="${H / 2 + 4}">${t.r.diameter} = ${fmt(2 * sv.R)} ${unit('mm')}</text>`;
+  svg += `<line x1="${X(0)}" y1="${yb}" x2="${X(sv.Ls)}" y2="${yb}" stroke="#F4EEF2"/><text x="${(X(0) + X(sv.Ls)) / 2}" y="${yb + 14}" text-anchor="middle">${t.r.length} = ${fmt(sv.Ls)} ${unit('mm')}</text>`;
+  $('#viz-rotor').innerHTML = svg;
+}
+// ---- step 3: the cross-section of the blade wall — N extrusion lines, their pitch, the layer and the nozzle
+function vizPrint() {
+  const wf = last.geo.wf, t = T(), W = 520, H = 220, pad = 30, N = wf.lines;
+  const total = wf.wall_mm, k = Math.min((W - 2 * pad) / total, 60), x0 = (W - total * k) / 2, yc = 120, h = wf.layer_mm * k * 2.2;
+  let svg = '';
+  for (let i = 0; i < N; i++) {
+    const cx = x0 + (wf.line_mm / 2 + i * wf.spacing_mm) * k;
+    svg += `<rect x="${(cx - wf.line_mm * k / 2).toFixed(1)}" y="${(yc - h / 2).toFixed(1)}" width="${(wf.line_mm * k).toFixed(1)}" height="${h.toFixed(1)}" rx="${(h / 2).toFixed(1)}" fill="#FF1A8C" opacity=".55" stroke="#FF5FB0"/>`;
+  }
+  const nz = Number(str('nozzle_mm')) * k, cx0 = x0 + wf.line_mm * k / 2;
+  svg += `<path d="M${cx0 - nz / 2 - 18} ${yc - h / 2 - 46} L${cx0 + nz / 2 + 18} ${yc - h / 2 - 46} L${cx0 + nz / 2} ${yc - h / 2 - 8} L${cx0 - nz / 2} ${yc - h / 2 - 8} Z" fill="#3A2633" stroke="#A99AA3"/>`;
+  svg += `<text x="${cx0 + nz / 2 + 26}" y="${yc - h / 2 - 22}">${t.r.nozzle} ${fmt(Number(str('nozzle_mm')), 2)} ${unit('mm')}</text>`;
+  const yb = yc + h / 2 + 22;
+  svg += `<line x1="${x0}" y1="${yb}" x2="${x0 + total * k}" y2="${yb}" stroke="#F4EEF2"/><line x1="${x0}" y1="${yb - 5}" x2="${x0}" y2="${yb + 5}" stroke="#F4EEF2"/><line x1="${x0 + total * k}" y1="${yb - 5}" x2="${x0 + total * k}" y2="${yb + 5}" stroke="#F4EEF2"/>`;
+  svg += `<text x="${x0 + total * k / 2}" y="${yb + 18}" text-anchor="middle">${fmt(total, 2)} ${unit('mm')} = ${N} ${plural(N, t.r.lines)} × ${fmt(wf.line_mm, 2)} ${unit('mm')}, ${t.r.step} ${fmt(wf.spacing_mm, 3)} ${unit('mm')}, ${t.r.layerShort} ${fmt(wf.layer_mm, 2)} ${unit('mm')}</text>`;
+  $('#viz-print').innerHTML = svg;
 }
 
 // ---- geometry: a quick preview build, the full build for the files
@@ -1010,7 +1124,7 @@ function preview() {
   const t0 = performance.now();
   const b = buildParts('low');
   last.build = b; last.checks = b.r.checks.warn;
-  viewer.show(b.r.parts.rotor, b.r.parts.nose, b.r);
+  viewer.show(b.r, last);
   render();
   $('#build-info').textContent = `${fmt(b.r.parts.rotor.f.length)} △ · ${Math.round(performance.now() - t0)} ms`;
 }
@@ -1024,7 +1138,8 @@ function download(part) {
   $('#build-info').textContent = `${part}: ${fmt(m.f.length)} △ · ${a.download}`;
 }
 
-// ---- the WebGL preview (researches/03 §3): flat-shaded triangles, an orbit camera around the rotor's axis
+// ---- the WebGL view of the installation (researches/03 §3, ideas/04): the axis HORIZONTAL (world X), the rotor on a fixed
+// axle, the front bearing stand in the gap, the nose fairing ahead of the stand, the generator and its stand behind, a base beam.
 const viewer = (() => {
   const cv = $('#view'), gl = cv.getContext('webgl', { antialias: true });
   if (!gl) return { show() {} };
@@ -1033,29 +1148,39 @@ const viewer = (() => {
   const sh = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); return s; };
   const prog = gl.createProgram(); gl.attachShader(prog, sh(gl.VERTEX_SHADER, vs)); gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, fs)); gl.linkProgram(prog);
   const loc = { p: gl.getAttribLocation(prog, 'p'), n: gl.getAttribLocation(prog, 'n'), mvp: gl.getUniformLocation(prog, 'mvp'), nm: gl.getUniformLocation(prog, 'nm'), col: gl.getUniformLocation(prog, 'col') };
-  let parts = [], centre = [0, 0, 0], radius = 100, yaw = 0.7, pitch = 0.35, zoom = 1;
-  const upload = (m, xf) => {
+  let parts = [], centre = [0, 0, 0], radius = 100, yaw = -2.2, pitch = 0.3, zoom = 1;
+  const upload = (m, xf, col) => {
     const pos = new Float32Array(m.f.length * 9), nor = new Float32Array(m.f.length * 9);
-    let o = 0;
+    let o = 0; const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
     for (const [a, b, c] of m.f) {
       const A = xf(m.v[a]), B = xf(m.v[b]), C = xf(m.v[c]);
       const u = [B[0] - A[0], B[1] - A[1], B[2] - A[2]], v = [C[0] - A[0], C[1] - A[1], C[2] - A[2]];
       const nn = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
-      for (const P of [A, B, C]) { pos.set(P, o); nor.set(nn, o); o += 3; }
+      for (const P of [A, B, C]) { pos.set(P, o); nor.set(nn, o); o += 3; for (let i = 0; i < 3; i++) { lo[i] = Math.min(lo[i], P[i]); hi[i] = Math.max(hi[i], P[i]); } }
     }
     const bp = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, bp); gl.bufferData(gl.ARRAY_BUFFER, pos, gl.STATIC_DRAW);
     const bn = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, bn); gl.bufferData(gl.ARRAY_BUFFER, nor, gl.STATIC_DRAW);
-    return { bp, bn, count: m.f.length * 3 };
+    return { bp, bn, count: m.f.length * 3, col, lo, hi };
   };
-  function show(rotor, nose, r) {
+  function show(r, st) {
     for (const q of parts) { gl.deleteBuffer(q.bp); gl.deleteBuffer(q.bn); }
-    const bb = KATAK.bounds(rotor);
-    centre = bb.lo.map((x, i) => (x + bb.hi[i]) / 2); radius = Math.max(...bb.size) * 0.75;
-    parts = [{ ...upload(rotor, (p) => p), col: [1.0, 0.10, 0.55] }];
-    if (nose) {
-      const zFront = r.lift_mm - r.params.hub_front_mm;          // the hub's front end, where the nose cup sits
-      parts.push({ ...upload(nose, (p) => [p[0], p[1], zFront - p[2] + r.params.hub_front_mm * 0.9]), col: [0.95, 0.85, 0.92] });
-    }
+    const P = KATAK._, p = r.params, D = p.diameter_mm, R = D / 2, Ls = r.dims.Ls;
+    const axD = p.bore === 'bearings' ? st.bearing.d : p.bore_mm, gap = p.nose_gap_mm, ground = -(R + 0.12 * D);
+    const xStand = -p.hub_front_mm - gap / 2, xNose = -p.hub_front_mm - gap, xGen = Ls + p.hub_back_mm + 6, genL = 0.18 * D, genD = Math.max(0.22 * D, st.bearing.D + 16);
+    const axis = (dx = 0) => (q) => [q[2] + dx, q[0], q[1]];                 // a part built along z → world X
+    const up = (dx) => (q) => [q[0] + dx, q[1], q[2] + ground];               // a post built along z → world Z, from the ground
+    parts = [];
+    parts.push(upload(r.parts.rotor, (q) => [q[2] - r.lift_mm, q[0], q[1]], [1.0, 0.10, 0.55]));
+    parts.push(upload(P.prism('round', axD, xNose - 4, xGen + genL + 12, 24), axis(), [0.66, 0.68, 0.72]));
+    const hous = Math.min(gap - 6, st.bearing.B + 6);
+    parts.push(upload(P.prism('round', st.bearing.D + 8, xStand - hous / 2, xStand + hous / 2, 32), axis(), [0.32, 0.26, 0.30]));
+    parts.push(upload(P.prism('square', Math.min(12, gap - 4), 0, -ground - (st.bearing.D + 8) / 2, 4), up(xStand), [0.32, 0.26, 0.30]));
+    parts.push(upload(P.prism('round', genD, xGen, xGen + genL, 40), axis(), [0.22, 0.20, 0.22]));
+    parts.push(upload(P.prism('square', 14, 0, -ground - genD / 2, 4), up(xGen + genL / 2), [0.32, 0.26, 0.30]));
+    parts.push(upload(P.prism('square', 16, xStand - 20, xGen + genL + 20, 4), (q) => [q[2], q[0], q[1] + ground - 6], [0.32, 0.26, 0.30]));
+    if (r.parts.nose) parts.push(upload(r.parts.nose, (q) => [xNose - q[2], q[0], q[1]], [0.96, 0.86, 0.92]));
+    const lo = [0, 1, 2].map((i) => Math.min(...parts.map((q) => q.lo[i]))), hi = [0, 1, 2].map((i) => Math.max(...parts.map((q) => q.hi[i])));
+    centre = lo.map((x, i) => (x + hi[i]) / 2); radius = Math.max(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]) * 0.62;
     draw();
   }
   function mat4mul(a, b) { const o = new Float32Array(16); for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) { let s = 0; for (let k = 0; k < 4; k++) s += a[k * 4 + j] * b[i * 4 + k]; o[i * 4 + j] = s; } return o; }
@@ -1067,7 +1192,7 @@ const viewer = (() => {
     const dist = radius * 3 * zoom;
     const eye = [centre[0] + dist * Math.cos(pitch) * Math.cos(yaw), centre[1] + dist * Math.cos(pitch) * Math.sin(yaw), centre[2] + dist * Math.sin(pitch)];
     const f = [centre[0] - eye[0], centre[1] - eye[1], centre[2] - eye[2]]; const fl = Math.hypot(...f); f.forEach((x, i) => (f[i] = x / fl));
-    let s = [f[1] * 1 - f[2] * 0, f[2] * 0 - f[0] * 1, 0]; const sl = Math.hypot(...s) || 1; s = s.map((x) => x / sl);
+    let s = [f[1], -f[0], 0]; const sl = Math.hypot(...s) || 1; s = s.map((x) => x / sl);
     const u = [s[1] * f[2] - s[2] * f[1], s[2] * f[0] - s[0] * f[2], s[0] * f[1] - s[1] * f[0]];
     const view = new Float32Array([s[0], u[0], -f[0], 0, s[1], u[1], -f[1], 0, s[2], u[2], -f[2], 0,
       -(s[0] * eye[0] + s[1] * eye[1] + s[2] * eye[2]), -(u[0] * eye[0] + u[1] * eye[1] + u[2] * eye[2]), f[0] * eye[0] + f[1] * eye[1] + f[2] * eye[2], 1]);

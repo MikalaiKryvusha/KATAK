@@ -61,14 +61,18 @@ for (const hub of [{ bore: 'bearings' }, { bore: 'profile', bore_kind: 'round' }
   const c = K.checkClosed(r.parts.rotor);
   check(`hub ${hub.bore}${hub.bore_kind ? '/' + hub.bore_kind : ''}: rotor closed`, c.closed, `open ${c.open}, doubled ${c.doubled}`);
 }
+for (const pct of [10, 50, 100]) {
+  const r = K.build({ detail: pct });
+  check(`detail ${pct} %: rotor and nose closed`, K.checkClosed(r.parts.rotor).closed && K.checkClosed(r.parts.nose).closed, `${r.parts.rotor.f.length} triangles`);
+}
 for (const shape of ['ellipse', 'ogive', 'cone']) {
   const r = K.build({ detail: 'low', nose_shape: shape });
   const c = K.checkClosed(r.parts.nose);
   check(`nose ${shape}: closed, positive volume`, c.closed && K.signedVolume(r.parts.nose) > 0, `open ${c.open}, doubled ${c.doubled}`);
 }
 {
-  const r = K.build({ detail: 'low', ties: 0 });
-  check('no ties: rotor closed', K.checkClosed(r.parts.rotor).closed);
+  const r = K.build({ detail: 'low', ties: 3 });
+  check('ties on (3 planes): rotor closed', K.checkClosed(r.parts.rotor).closed);
   const r2 = K.build({ detail: 'low', rim: true, diameter_mm: 450 });
   check('exit rim on a 450 mm rotor: closed', K.checkClosed(r2.parts.rotor).closed);
   check('defaults: validity checks pass (root rises, blades keep a gap)', r2.checks.warn.length === 0 && K.build({ detail: 'low' }).checks.warn.length === 0, JSON.stringify(K.build({ detail: 'low' }).checks));
