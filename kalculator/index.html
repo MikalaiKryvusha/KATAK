@@ -56,9 +56,13 @@ a { color: var(--accent2); }
 .field .lab { display: flex; align-items: flex-start; gap: 6px; }
 .info { flex: none; width: 18px; height: 18px; margin-top: 1px; padding: 0; border-radius: 50%; border: 1px solid var(--accent2); background: transparent; color: var(--accent2); font: 700 11px/16px var(--display); cursor: help; }
 .info:hover, .info:focus-visible, .info[aria-expanded="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); outline: none; }
-#info-pop { position: absolute; z-index: 30; width: min(400px, calc(100vw - 24px)); background: var(--surface2); border: 1px solid var(--accent); border-radius: 12px; padding: 12px 14px; box-shadow: 0 10px 28px rgba(0, 0, 0, .55); font-size: 13.5px; line-height: 1.5; }
+/* wide and low on a desktop — the sections two by two (owner 2026-11-16 18:45: «подсказки высокие и узкие, что я должен скролить
+   страницу браузера вниз»); fixed to the window and always inside it; one column on a phone */
+#info-pop { position: fixed; z-index: 30; width: min(760px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow-y: auto; background: var(--surface2); border: 1px solid var(--accent); border-radius: 12px; padding: 12px 16px; box-shadow: 0 10px 28px rgba(0, 0, 0, .55); font-size: 13.5px; line-height: 1.5; }
 #info-pop h4 { margin: 0 0 8px; font: 600 15px var(--display); color: var(--ink); }
-#info-pop dl { margin: 0; display: grid; gap: 8px; }
+#info-pop dl { margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 20px; }
+#info-pop .sec { min-width: 0; }
+@media (max-width: 760px) { #info-pop dl { grid-template-columns: 1fr; } }
 #info-pop dt { color: var(--accent2); font: 600 11.5px var(--display); text-transform: uppercase; letter-spacing: .06em; }
 #info-pop dd { margin: 2px 0 0; color: var(--ink); }
 .field .hint { color: var(--muted); font-size: 12.5px; }
@@ -841,7 +845,10 @@ const $ = (s) => document.querySelector(s);
 const FIELDS = [
   ['v_ref', 'site', 'num', 3.7, { min: 1, max: 15, step: 0.1, unit: 'm/s' }],
   ['z_ref', 'site', 'num', 10, { min: 1, max: 100, step: 1, unit: 'm' }],
-  ['height_m', 'site', 'num', 6, { min: 1, max: 60, step: 0.5, unit: 'm' }],
+  // 22.5 m [AI] by the owner's mandate (2026-11-16 18:47 «на твоё усмотрение»): the placement «roof above the ridge» means a
+  // rise over the ridge of at least half the building's height (researches/01 §3.5); a five-storey building ≈ 15 m (5 × 3 m,
+  // the agent's estimate) → 15 × 1.5 = 22.5 m. At 6 m the Minsk hub wind (2.9 m/s) was below the cut-in speed.
+  ['height_m', 'site', 'num', 22.5, { min: 1, max: 60, step: 0.5, unit: 'm' }],
   ['terrain', 'site', 'sel', 'suburb', { opts: ['sea', 'snow', 'open', 'crops', 'scattered', 'park', 'suburb', 'city'] }],
   ['site', 'site', 'sel', 'roof_high', { opts: ['field', 'rural', 'roof_high', 'roof', 'yard'] }],
   ['alt_m', 'site', 'num', 220, { min: 0, max: 4000, step: 10, unit: 'm' }],
@@ -923,6 +930,7 @@ const I18N = {
     },
     h: {
       v_ref: 'среднегодовое значение по данным метеостанции или ветрового атласа; по умолчанию Минск', z_ref: 'стандартная высота флюгера метеостанции 10 м',
+      height_m: 'по умолчанию 22,5 м: кровля пятиэтажного дома высотой 15 м и выступ над коньком на половину высоты здания',
       terrain: 'задаёт длину шероховатости z₀ в логарифмическом профиле скорости', site: 'задаёт коэффициент выработки площадки f_site',
       alt_m: 'определяет плотность воздуха по стандартной атмосфере', temp_c: 'определяет плотность воздуха',
       weibull_k: 'значение 2 соответствует распределению Рэлея', ld: 'при пустом поле определяется по условию зазора между витками',
@@ -1018,6 +1026,7 @@ const I18N = {
     },
     h: {
       v_ref: 'annual mean from a weather station or a wind atlas; the default is Minsk', z_ref: 'the standard vane height of a weather station is 10 m',
+      height_m: 'the default is 22.5 m: the roof of a 15 m five-storey building and a rise above the ridge of half the building height',
       terrain: 'sets the roughness length z₀ of the logarithmic speed profile', site: 'sets the site yield factor f_site',
       alt_m: 'determines the air density by the standard atmosphere', temp_c: 'determines the air density',
       weibull_k: 'the value 2 corresponds to the Rayleigh distribution', ld: 'when empty, follows from the gap condition between the turns',
@@ -1218,12 +1227,15 @@ function infoShow(btn) {
   if (infoBtn && infoBtn !== btn) infoBtn.setAttribute('aria-expanded', 'false');
   const id = btn.dataset.info, t = T(), x = (t.info || {})[id], esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
   const rows = x ? [[t.r.infoD, x.d], [t.r.infoV, x.v], [t.r.infoO, x.o], [t.r.infoS, x.s]].filter(([, v]) => v) : [[t.r.infoD, t.h[id] || '—']];
-  infoPop.innerHTML = `<h4>${esc(t.f[id] ?? id)}</h4><dl>${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>`;
+  infoPop.innerHTML = `<h4>${esc(t.f[id] ?? id)}</h4><dl>${rows.map(([k, v]) => `<div class="sec"><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>`;
   infoPop.hidden = false; infoBtn = btn; btn.setAttribute('aria-expanded', 'true');
+  // window coordinates (the popup is position: fixed): below the button; else above it; else as low as it fits — never past
+  // the window's edge, so the page never has to be scrolled to read it
   const b = btn.getBoundingClientRect(), w = infoPop.offsetWidth, h = infoPop.offsetHeight, pad = 12;
-  let left = b.left + window.scrollX, top = b.bottom + window.scrollY + 6;
-  left = Math.max(window.scrollX + pad, Math.min(left, window.scrollX + document.documentElement.clientWidth - w - pad));
-  if (b.bottom + 6 + h > window.innerHeight && b.top - 6 - h > 0) top = b.top + window.scrollY - h - 6;
+  const vw = document.documentElement.clientWidth, vh = window.innerHeight;
+  const left = Math.max(pad, Math.min(b.left, vw - w - pad));
+  let top = b.bottom + 6;
+  if (top + h > vh - pad) top = b.top - 6 - h >= pad ? b.top - 6 - h : Math.max(pad, vh - pad - h);
   infoPop.style.left = `${left}px`; infoPop.style.top = `${top}px`;
 }
 function infoHide() { infoPop.hidden = true; infoPinned = false; if (infoBtn) infoBtn.setAttribute('aria-expanded', 'false'); infoBtn = null; }
@@ -1240,6 +1252,8 @@ document.addEventListener('click', (e) => {
 document.addEventListener('focusin', (e) => { if (e.target.classList && e.target.classList.contains('info') && !infoPinned) infoShow(e.target); });
 document.addEventListener('focusout', (e) => { if (e.target.classList && e.target.classList.contains('info')) infoLater(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !infoPop.hidden) infoHide(); });
+// the popup is fixed to the window: a scrolled page moves its button away — a hover popup closes, a pinned one follows
+addEventListener('scroll', () => { if (infoPop.hidden) return; if (infoPinned && infoBtn) { const b = infoBtn; infoShow(b); infoPinned = true; } else infoHide(); }, { passive: true });
 
 const num = (id) => { const v = state[id] ?? FIELDS.find((f) => f[0] === id)[3]; return v === '' || v == null ? null : Number(v); };
 const str = (id) => String(state[id] ?? FIELDS.find((f) => f[0] === id)[3]);

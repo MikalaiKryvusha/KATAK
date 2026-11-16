@@ -80,14 +80,21 @@ check('ideas/07: a click pins the popup (it stays when the pointer leaves)', awa
 await page.keyboard.press('Escape'); await page.waitForTimeout(100);
 check('ideas/07: Esc closes the pinned popup', !(await pop.isVisible()));
 // every field's popup carries the four sections the owner asked for, the optimum among them (a click opens each in turn)
-const short = [];
+const short = [], outside = []; let maxH = 0;
 for (const id of await page.locator('.field .info').evaluateAll((bs) => bs.map((b) => b.dataset.info))) {
+  const shown = await page.locator(`.info[data-info="${id}"]`).isVisible();   // hidden fields (another mode) have no place on screen
+  if (shown) await page.locator(`.info[data-info="${id}"]`).scrollIntoViewIfNeeded();
   await page.evaluate((i) => document.querySelector(`.info[data-info="${i}"]`).click(), id); await page.waitForTimeout(30);
   const dts = await pop.locator('dt').allInnerTexts();
   if (!(dts.length === 4 && dts.some((x) => /оптимум/i.test(x)))) short.push(`${id}:${dts.length}`);
+  // owner 18:45: wide and low on a desktop, always inside the window — no page scroll to read it
+  const pb = shown ? await pop.boundingBox() : null;
+  if (shown && (!pb || pb.y < 0 || pb.y + pb.height > 900 || pb.width < 640)) outside.push(`${id}:${pb ? `${pb.width.toFixed(0)}×${pb.height.toFixed(0)}@${pb.y.toFixed(0)}` : 'none'}`);
+  maxH = Math.max(maxH, pb ? pb.height : 0);
   await page.keyboard.press('Escape');
 }
 check('ideas/07: every popup shows «Что задаёт · Варианты и влияние · Оптимум · Источник»', short.length === 0, short.join(' ') || `all ${nInfo}`);
+check('ideas/07: desktop 1440 × 900 — every popup ≥ 640 px wide and wholly inside the window', outside.length === 0, outside.join(' ') || `all ${nInfo}, the tallest ${maxH.toFixed(0)} px`);
 
 // ---- 1c. the owner's print defaults (2026-11-16 16:42–16:43): layer 0.2 mm, wall 2 mm → snapped up to 5 lines of a 0.4 nozzle
 check('defaults: layer field 0.2, wall field 2', (await page.inputValue('#in-layer_mm')) === '0.2' && (await page.inputValue('#in-wall_mm')) === '2',
