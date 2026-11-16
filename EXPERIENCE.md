@@ -56,7 +56,7 @@
 > <!-- classes: question-already-answered, guard-not-proven-against-threat, shown-as-link,
 >      claim-before-evidence, owner-decision-not-applied, text-in-agents-world,
 >      etalon-from-dirty-tree, shell-lied, escaping-layer, twins-missed,
->      field-dropped-in-rebuild, render-unverified, subagent-overspawn, environment-guessed, offset-sheet-boundary -->
+>      field-dropped-in-rebuild, render-unverified, subagent-overspawn, environment-guessed, offset-sheet-boundary, stale-commit-message -->
 >
 > | Class slug | The failure it names |
 > |---|---|
@@ -79,6 +79,17 @@
 > Skill: `/experience` (capture a lesson · recall relevant lessons).
 
 ## Entries
+
+### EXP-0007 · 2026-11-16 · ❌→✅ · #git #commit #message
+class: stale-commit-message
+**Context:** the closing commit of session 2, its message written to `.work/tmp/commit-msg.txt` with the Write tool.
+**Tried / did:** ran `git add`, `git commit -F .work/tmp/commit-msg.txt`, `git push` in one response after the Write.
+**Result:** ❌ the Write was refused («File has been modified since read»), the commit took the PREVIOUS message (a5a367e went out
+described as the frame commit); ✅ an empty correction commit 91ab026 names a5a367e and its real content (no history rewrite).
+**Lesson:** the commit runs only after the message file is confirmed — read its first line back in the same command as the commit.
+**Repro:** `head -1 .work/tmp/commit-msg.txt && git commit -F .work/tmp/commit-msg.txt` — the printed line is the intended subject.
+**Trigger:** committing with `-F` → print the first line of the file first; a refused Write stops the commit.
+**Not for:** `git commit -m` with an ASCII one-liner.
 
 ### EXP-0006 · 2026-11-16 · ❌→✅ · #geometry #split #sheet #offset
 class: offset-sheet-boundary
