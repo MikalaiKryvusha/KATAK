@@ -1,0 +1,410 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>KATAK — калькулятор турбины Архимеда</title>
+<style>
+/* Phase A placeholder page: the core below is the product of this phase; the full layout (KEINKT Calibrator pattern, Krinik
+   pink) arrives in phase C — plans/01_EPIC_kalculator_prototype.md. */
+:root { --bg:#0D0D0D; --surface:#1A1A1A; --ink:#F2F2F2; --muted:#9A9A9A; --accent:#FF1A8C; color-scheme: dark; }
+body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.5 system-ui, "Segoe UI", sans-serif; }
+main { max-width:900px; margin:0 auto; padding:32px 24px; display:flex; flex-direction:column; gap:16px; }
+h1 { margin:0; font-size:32px; } h1 b { color:var(--accent); }
+button { font:600 16px system-ui; padding:12px 18px; border-radius:8px; border:0; background:var(--accent); color:#fff; cursor:pointer; width:fit-content; }
+pre { background:var(--surface); padding:12px; border-radius:8px; white-space:pre-wrap; }
+</style>
+</head>
+<body>
+<main>
+  <h1><b>KATAK</b> — Krinik Archimedes Turbine Automated Kalculator</h1>
+  <p>Прототип, фаза A: ядро геометрии. Кнопка собирает ротор с настройками по умолчанию и скачивает STL.</p>
+  <button type="button" id="dl">Скачать STL ротора</button>
+  <pre id="out"></pre>
+</main>
+<script type="module">
+// ===== CORE-BEGIN (pure functions, no DOM; tested by kalculator/test.mjs) =====
+// The KATAK core: geometry of the printable turbine and the binary STL. Units: millimetres in geometry (the STL boundary),
+// SI in physics (phase B). Every non-trivial block carries its test status (TESTING_FRAMEWORK.md markers).
+const KATAK = (() => {
+  const TAU = Math.PI * 2;
+
+  // ---------------------------------------------------------------- vectors
+  const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+  const mul = (a, k) => [a[0] * k, a[1] * k, a[2] * k];
+  const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const len = (a) => Math.hypot(a[0], a[1], a[2]);
+  const unit = (a) => { const l = len(a) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
+
+  // ---------------------------------------------------------------- mesh
+  // A mesh is { v: [[x,y,z]…], f: [[a,b,c]…] } — one or more CLOSED shells. Shells may overlap: slicers union closed shells
+  // (risk (a) of plans/01 — proven by slicing in the run report). [NOT-TESTED]
+  const mesh = () => ({ v: [], f: [] });
+  function append(dst, src) {
+    const o = dst.v.length;
+    for (const p of src.v) dst.v.push(p);
+    for (const [a, b, c] of src.f) dst.f.push([a + o, b + o, c + o]);
+    return dst;
+  }
+  function signedVolume(m) { let s = 0; for (const [a, b, c] of m.f) s += dot(m.v[a], cross(m.v[b], m.v[c])); return s / 6; }
+  // flip a whole shell when it came out inside-out (its signed volume is negative) — shells are built consistently, so
+  // one global decision per shell suffices
+  function orientOutward(m) { if (signedVolume(m) < 0) for (const f of m.f) { const t = f[1]; f[1] = f[2]; f[2] = t; } return m; }
+  // Closedness (2-manifold, consistently oriented): every directed edge a→b occurs once and its reverse b→a occurs once.
+  function checkClosed(m) {
+    const seen = new Map();
+    for (const [a, b, c] of m.f) for (const [p, q] of [[a, b], [b, c], [c, a]]) {
+      const k = p + ',' + q; seen.set(k, (seen.get(k) || 0) + 1);
+    }
+    let open = 0, doubled = 0;
+    for (const [k, n] of seen) {
+      if (n > 1) doubled++;
+      const [p, q] = k.split(','); if (!seen.has(q + ',' + p)) open++;
+    }
+    return { closed: open === 0 && doubled === 0, open, doubled, triangles: m.f.length };
+  }
+  function bounds(m) {
+    const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+    for (const p of m.v) for (let i = 0; i < 3; i++) { if (p[i] < lo[i]) lo[i] = p[i]; if (p[i] > hi[i]) hi[i] = p[i]; }
+    return { lo, hi, size: sub(hi, lo) };
+  }
+  function translate(m, d) { m.v = m.v.map((p) => add(p, d)); return m; }
+
+  // ---------------------------------------------------------------- shells
+  // A thick sheet: two grids of the same topology (top, bottom) closed by four side strips. The boundary walk follows the
+  // direction the top faces use, so the sides come out consistent (derivation in the commit of this block). [NOT-TESTED]
+  function gridSolid(top, bot) {
+    const R = top.length, Cn = top[0].length, m = mesh();
+    const it = (i, j) => i * Cn + j, ib = (i, j) => R * Cn + i * Cn + j;
+    for (const row of top) for (const p of row) m.v.push(p);
+    for (const row of bot) for (const p of row) m.v.push(p);
+    for (let i = 0; i < R - 1; i++) for (let j = 0; j < Cn - 1; j++) {
+      m.f.push([it(i, j), it(i + 1, j), it(i + 1, j + 1)], [it(i, j), it(i + 1, j + 1), it(i, j + 1)]);
+      m.f.push([ib(i, j), ib(i + 1, j + 1), ib(i + 1, j)], [ib(i, j), ib(i, j + 1), ib(i + 1, j + 1)]);
+    }
+    const loop = [];
+    for (let i = 0; i < R; i++) loop.push([i, 0]);
+    for (let j = 1; j < Cn; j++) loop.push([R - 1, j]);
+    for (let i = R - 2; i >= 0; i--) loop.push([i, Cn - 1]);
+    for (let j = Cn - 2; j >= 1; j--) loop.push([0, j]);
+    for (let k = 0; k < loop.length; k++) {
+      const p = loop[k], q = loop[(k + 1) % loop.length];
+      const tp = it(...p), tq = it(...q), bp = ib(...p), bq = ib(...q);
+      m.f.push([tq, tp, bp], [tq, bp, bq]);
+    }
+    return orientOutward(m);
+  }
+
+  // Profiles of the shaft / bore: the boundary point at polar angle a — every profile sampled at the SAME angles, so an outer
+  // and an inner profile pair up vertex by vertex. kinds: round (size = diameter), hex (size = across flats), square (size =
+  // side), d (size = diameter, flat at 0.4·r from the centre's edge — the common D-shaft cut of ≈ 0.1·d). [NOT-TESTED]
+  function profileRadius(kind, size, a) {
+    const r = size / 2;
+    if (kind === 'hex') { const ap = r, seg = TAU / 6, x = ((a % seg) + seg) % seg - seg / 2; return ap / Math.cos(x); }
+    if (kind === 'square') { const ap = r, seg = TAU / 4, x = ((a % seg) + seg) % seg - seg / 2; return ap / Math.cos(x); }
+    if (kind === 'd') { const flat = r * 0.8, c = Math.cos(a); return c > 0 && r * c > flat ? flat / c : r; }
+    return r;
+  }
+  const profileRing = (kind, size, z, n, a0 = 0) =>
+    Array.from({ length: n }, (_, i) => { const a = a0 + TAU * i / n, r = profileRadius(kind, size, a); return [r * Math.cos(a), r * Math.sin(a), z]; });
+
+  // A prism of a profile from z0 to z1, optionally with a profiled hole through it. [NOT-TESTED]
+  function prism(outerKind, outerSize, z0, z1, n, holeKind = null, holeSize = 0) {
+    const m = mesh();
+    const ob = profileRing(outerKind, outerSize, z0, n), ot = profileRing(outerKind, outerSize, z1, n);
+    const at = (arr) => { const o = m.v.length; for (const p of arr) m.v.push(p); return o; };
+    const OB = at(ob), OT = at(ot);
+    for (let i = 0; i < n; i++) { const j = (i + 1) % n; m.f.push([OB + i, OB + j, OT + j], [OB + i, OT + j, OT + i]); }
+    if (holeKind) {
+      const IB = at(profileRing(holeKind, holeSize, z0, n)), IT = at(profileRing(holeKind, holeSize, z1, n));
+      for (let i = 0; i < n; i++) {
+        const j = (i + 1) % n;
+        m.f.push([IB + i, IT + j, IB + j], [IB + i, IT + i, IT + j]);                 // inner wall, facing the axis
+        m.f.push([OT + i, OT + j, IT + j], [OT + i, IT + j, IT + i]);                 // top annulus
+        m.f.push([OB + i, IB + j, OB + j], [OB + i, IB + i, IB + j]);                 // bottom annulus
+      }
+    } else {
+      const cb = at([[0, 0, z0]]), ct = at([[0, 0, z1]]);
+      for (let i = 0; i < n; i++) { const j = (i + 1) % n; m.f.push([cb, OB + j, OB + i], [ct, OT + i, OT + j]); }
+    }
+    return orientOutward(m);
+  }
+
+  // A solid of revolution about z from a profile [[r, z]…]: either from pole to pole (first and last r = 0) or a closed loop
+  // that never touches the axis. [NOT-TESTED]
+  function revolve(profile, n) {
+    const m = mesh();
+    const pole = (p) => p[0] <= 1e-9;
+    const P = profile;
+    const openPoles = pole(P[0]) && pole(P[P.length - 1]);
+    const rings = [];
+    for (let k = 0; k < P.length; k++) {
+      if (openPoles && (k === 0 || k === P.length - 1)) { rings.push(m.v.length); m.v.push([0, 0, P[k][1]]); continue; }
+      rings.push(m.v.length);
+      for (let i = 0; i < n; i++) { const a = TAU * i / n; m.v.push([P[k][0] * Math.cos(a), P[k][0] * Math.sin(a), P[k][1]]); }
+    }
+    const isPole = (k) => openPoles && (k === 0 || k === P.length - 1);
+    const last = openPoles ? P.length - 1 : P.length;
+    for (let k = 0; k < last; k++) {
+      const k2 = (k + 1) % P.length, A = rings[k], B = rings[k2];
+      for (let i = 0; i < n; i++) {
+        const j = (i + 1) % n;
+        if (isPole(k)) m.f.push([A, B + j, B + i]);
+        else if (isPole(k2)) m.f.push([A + i, A + j, B]);
+        else m.f.push([A + i, A + j, B + j], [A + i, B + j, B + i]);
+      }
+    }
+    return orientOutward(m);
+  }
+
+  // A round tube swept along a polyline (ribs) or a closed loop (the rim ring); frames by parallel transport. [NOT-TESTED]
+  function sweepTube(path, radius, n, closedLoop = false) {
+    const m = mesh(), N = path.length;
+    const tan = path.map((p, i) => unit(sub(path[closedLoop ? (i + 1) % N : Math.min(N - 1, i + 1)], path[closedLoop ? (i - 1 + N) % N : Math.max(0, i - 1)])));
+    let nrm = unit(cross(tan[0], Math.abs(tan[0][2]) < 0.9 ? [0, 0, 1] : [1, 0, 0]));
+    const rings = [];
+    for (let i = 0; i < N; i++) {
+      if (i > 0) { const t = tan[i]; nrm = unit(sub(nrm, mul(t, dot(nrm, t)))); }
+      const bin = cross(tan[i], nrm), o = m.v.length; rings.push(o);
+      for (let k = 0; k < n; k++) { const a = TAU * k / n; m.v.push(add(path[i], add(mul(nrm, radius * Math.cos(a)), mul(bin, radius * Math.sin(a))))); }
+    }
+    const segs = closedLoop ? N : N - 1;
+    for (let i = 0; i < segs; i++) {
+      const A = rings[i], B = rings[(i + 1) % N];
+      for (let k = 0; k < n; k++) { const l = (k + 1) % n; m.f.push([A + k, B + k, B + l], [A + k, B + l, A + l]); }
+    }
+    if (!closedLoop) {
+      const c0 = m.v.length; m.v.push(path[0]); const c1 = m.v.length; m.v.push(path[N - 1]);
+      const A = rings[0], B = rings[N - 1];
+      // the caps run AGAINST the side wall's ring edges (side: A+l→A+k at the start, B+k→B+l at the end) — round 1 had them
+      // the same way round, and every rib came out open (kalculator/test.mjs: open 144 = 9 ribs × 8 × 2 caps)
+      for (let k = 0; k < n; k++) { const l = (k + 1) % n; m.f.push([c0, A + k, A + l], [c1, B + l, B + k]); }
+    }
+    return orientOutward(m);
+  }
+
+  // ---------------------------------------------------------------- printing (researches/02_3d_printing)
+  // Wall of N extrusion lines: spacing = w − h·(1 − π/4) (Slic3r flow math), T(N) = w + (N − 1)·spacing; the requested wall
+  // is a MINIMUM — it snaps UP to the next T(N), N ≥ 2 (idea 03, owner: «генерировать удобные толщины»; rounding up is the
+  // agent's call [AI]: a wall thinner than asked would be weaker than the user planned). [NOT-TESTED]
+  function wallForNozzle({ nozzle_mm = 0.4, layer_mm = null, line_mm = null, wanted_mm = 1.2, minLines = 2 } = {}) {
+    const w = line_mm || 1.125 * nozzle_mm;                 // PrusaSlicer default width (researches/02 §1)
+    const h = layer_mm || Math.round(0.5 * nozzle_mm / 0.02) * 0.02;   // 50 % of the nozzle (researches/02 §4)
+    const spacing = w - h * (1 - Math.PI / 4);
+    const T = (N) => w + (N - 1) * spacing;
+    const N = Math.max(minLines, Math.ceil((wanted_mm - w) / spacing - 1e-9) + 1);
+    return { lines: N, wall_mm: T(N), line_mm: w, layer_mm: h, spacing_mm: spacing, T };
+  }
+
+  // ---------------------------------------------------------------- the turbine (researches/01 §6.2, §5.8, §6.8, §7)
+  // The rotor's NOSE faces the wind (z = 0); each blade opens from the hub to the exit (z = L_s, radius R). The blade surface is
+  // ruled: every meridional section is a straight segment at the opening angle α(u) to the axis (§6.2). [NOT-TESTED]
+  const DETAIL = {                       // samples along the wrap × across the blade × around a circle
+    low: { along: 48, across: 4, round: 32 },
+    medium: { along: 96, across: 6, round: 64 },
+    high: { along: 192, across: 10, round: 96 },
+    ultra: { along: 384, across: 16, round: 160 },
+  };
+  // Defaults = researches/01 §7 «Рекомендуемые правила проектирования»; diameter is the user's main input.
+  const DEFAULTS = {
+    diameter_mm: 300, ld: null, hub_ratio: 0.10, blades: 3, turns: 1.0, hand: 1, p_exp: 1, q_exp: 1,
+    angle_mode: 'variable', a1_deg: 30, a2_deg: 45, a3_deg: 60, alpha_deg: 60,
+    wall_mm: null,                       // null → t = max(0.8 % of D, 3 lines) (§7), then snapped UP to whole lines
+    nozzle_mm: 0.4, layer_mm: null, line_mm: null,
+    hub_od_mm: null,                     // null → max(0.1·D, bearing OD + 2·3 lines)
+    hub_front_mm: 6, hub_back_mm: 10,
+    bore: 'bearings', bore_kind: 'round', bore_mm: 10, bearing_od_mm: 26, bearing_w_mm: 8, fit_mm: 0.1,
+    ties: 3, tie_mm: 4, tie_at: 0.7,     // ties between neighbouring turns in `ties` meridional half-planes (§5.8), at tie_at of the span
+    rim: false, rim_mm: 4,               // exit ring — only for D ≥ 0.4 m and light (§5.8)
+    nose: true, nose_ratio: 0.8, nose_shape: 'ellipse', nose_wall_mm: 2.0, nose_fit_mm: 0.3,
+    detail: 'medium',
+  };
+  // The opening angle law α(u): fixed, or piecewise linear through (1/3, α1), (2/3, α2), (1, α3), constant below 1/3 (§6.2).
+  function alphaAt(p, u) {
+    if (p.angle_mode !== 'variable') return p.alpha_deg * Math.PI / 180;
+    const a = [p.a1_deg, p.a2_deg, p.a3_deg];
+    const d = u <= 1 / 3 ? a[0] : u <= 2 / 3 ? a[0] + (a[1] - a[0]) * (u - 1 / 3) * 3 : a[1] + (a[2] - a[1]) * (u - 2 / 3) * 3;
+    return d * Math.PI / 180;
+  }
+  // geometry numbers derived from the parameters (mm)
+  function dims(p, wall) {
+    const R = p.diameter_mm / 2, Ls = p.ld * p.diameter_mm, hubOD = p.hub_od_mm, rh = hubOD / 2;
+    const u0 = Math.pow(Math.min(0.5, Math.max(2 * wall, 3) / (R - rh)), 1 / p.p_exp);   // the blade starts where it is ≥ 2 walls wide
+    return { R, Ls, rh, u0 };
+  }
+  // The outer edge (§6.2): θ_o = θ_k + h·2π·n_t·u, r_o = r_h + (R − r_h)·u^p, z_o = L_s·u^q; root: z_h = z_o − (r_o − r_h)·cot α(u).
+  function bladeSurface(p, d, k, u, v, rRoot) {
+    const th = TAU * k / p.blades + p.hand * TAU * p.turns * u;
+    const ro = d.rh + (d.R - d.rh) * Math.pow(u, p.p_exp), zo = d.Ls * Math.pow(u, p.q_exp);
+    const zh = zo - (ro - d.rh) / Math.tan(alphaAt(p, u));
+    const r0 = rRoot ?? d.rh;
+    const r = r0 + v * (ro - r0), z = zh + v * (zo - zh) * (ro - r0) / Math.max(1e-9, ro - d.rh);
+    return [r * Math.cos(th), r * Math.sin(th), z];
+  }
+  function blade(p, d, k, wall, det) {
+    const top = [], bot = [], eps = 1e-4, rRoot = d.rh - wall / 2;   // the root sinks half a wall into the hub
+    const S = (u, v) => bladeSurface(p, d, k, u, v, rRoot);
+    for (let i = 0; i <= det.along; i++) {
+      const u = d.u0 + (1 - d.u0) * i / det.along, rt = [], rb = [];
+      for (let j = 0; j <= det.across; j++) {
+        const v = j / det.across, P = S(u, v);
+        const du = sub(S(Math.min(1, u + eps), v), S(Math.max(d.u0, u - eps), v));
+        const dv = sub(S(u, Math.min(1, v + eps)), S(u, Math.max(0, v - eps)));
+        const n = unit(cross(du, dv));
+        rt.push(add(P, mul(n, wall / 2))); rb.push(sub(P, mul(n, wall / 2)));
+      }
+      top.push(rt); bot.push(rb);
+    }
+    return gridSolid(top, bot);
+  }
+  // Validity (§6.2, checks 1–2): the root must stay downstream of the nose and rise with u; neighbouring blades must keep a gap.
+  function checks(p, d, wall) {
+    const warn = [];
+    let prev = -Infinity, minZh = Infinity;
+    for (let i = 0; i <= 200; i++) {
+      const u = d.u0 + (1 - d.u0) * i / 200, zh = bladeSurface(p, d, 0, u, 0)[2];
+      if (zh < prev - 1e-6) { warn.push('root-not-rising'); break; }
+      prev = zh; minZh = Math.min(minZh, zh);
+    }
+    if (minZh < -1e-6) warn.push('root-before-nose');
+    const aMin = Math.min(...(p.angle_mode === 'variable' ? [p.a1_deg, p.a2_deg, p.a3_deg] : [p.alpha_deg])) * Math.PI / 180;
+    const gap = ((d.Ls - (d.R - d.rh) / Math.tan(aMin)) / (p.blades * p.turns)) * Math.sin(aMin);
+    if (gap < 3 * wall) warn.push('blades-too-close');
+    return { warn, gap_mm: gap, minRoot_mm: minZh };
+  }
+  // The hub: a round tube along the axis. bore = 'bearings' → a round bore with a bearing seat at each end (press fit);
+  // 'profile' → a through hole of bore_kind (round / hex / square / d); 'solid' → a printed axle. [NOT-TESTED]
+  function hub(p, d, det) {
+    const z0 = -p.hub_front_mm, z1 = d.Ls + p.hub_back_mm, R = d.rh;
+    if (p.bore === 'solid') return prism(p.bore_kind, 2 * R, z0, z1, det.round);
+    if (p.bore === 'profile') return prism('round', 2 * R, z0, z1, det.round, p.bore_kind, p.bore_mm + p.fit_mm);
+    const rb = (p.bore_mm + 1.0) / 2;                       // the axle passes the hub freely between the bearings
+    const rs = (p.bearing_od_mm - p.fit_mm) / 2, w = p.bearing_w_mm;
+    return revolve([[R, z0], [R, z1], [rs, z1], [rs, z1 - w], [rb, z1 - w], [rb, z0 + w], [rs, z0 + w], [rs, z0]], det.round);
+  }
+  // Ties between neighbouring turns (§5.8, §6.6): in the meridional half-plane θ_p the blades cross as segments (one per
+  // blade, at different u). An AXIAL rod (parallel to the axis — it prints upright with no support when the rotor is printed
+  // axis-vertical, §5.9) stands at the radius of `tie_at` of the inner segment's span and joins it to the next segment — like
+  // the cross ties of the commercial rotor that stop the blades from fluttering against each other.
+  // History (2026-11-16): round 1 put one rod at a fixed radius — at n_t = 1 it crossed only ONE blade and was dropped; round 2
+  // ran perpendicular to the inner segment — the segments are not parallel (α grows 30° → 52°), the rod headed into the hub
+  // and was dropped again; both caught by the render and a dump of the segments, not by the closedness test. [NOT-TESTED]
+  function ties(p, d, wall, det) {
+    const out = [];
+    const seg = (u) => {                                     // the blade's line in the half-plane: root → edge, in (r, z)
+      const ro = d.rh + (d.R - d.rh) * Math.pow(u, p.p_exp), zo = d.Ls * Math.pow(u, p.q_exp), a = alphaAt(p, u);
+      return { u, a, r0: d.rh, z0: zo - (ro - d.rh) / Math.tan(a), r1: ro, z1: zo };
+    };
+    for (let t = 0; t < p.ties; t++) {
+      const thp = TAU * t / p.ties + Math.PI / p.blades, c = Math.cos(thp), s = Math.sin(thp);
+      const us = [];
+      for (let k = 0; k < p.blades; k++) for (let m = -3; m <= 3; m++) {
+        const u = (thp + TAU * m - TAU * k / p.blades) / (p.hand * TAU * p.turns);
+        if (u >= d.u0 && u <= 1) us.push(u);
+      }
+      us.sort((x, y) => x - y);
+      for (let i = 0; i + 1 < us.length; i++) {
+        const A = seg(us[i]), B = seg(us[i + 1]);
+        const r = A.r0 + p.tie_at * (A.r1 - A.r0);
+        if (r > B.r1 - p.tie_mm) continue;                    // the next turn does not reach this radius
+        const zAt = (S) => S.z0 + (r - S.r0) * (S.z1 - S.z0) / (S.r1 - S.r0);
+        const z0 = zAt(A) - wall * 0.4, z1 = zAt(B) + wall * 0.4;   // ends sink into both blades but stay inside them (a full wall poked through — render, 2026-11-16)
+        const path = []; const nSeg = 6;
+        for (let j = 0; j <= nSeg; j++) path.push([r * c, r * s, z0 + (z1 - z0) * j / nSeg]);
+        out.push(sweepTube(path, p.tie_mm / 2, Math.max(8, det.round / 4)));
+      }
+    }
+    return out;
+  }
+  // The nose (§6.8, idea 01): an ellipsoid / ogive / cone cup over the hub's front end, printed apex up; base radius = hub
+  // radius + wall, length = nose_ratio · base diameter. A cup, not sealed — the open base drains condensate (§6.8 p. 3).
+  function nose(p, d, det) {
+    const Ri = d.rh + p.nose_fit_mm / 2, Rb = Ri + p.nose_wall_mm, Ln = 2 * Rb * p.nose_ratio, n = det.along;
+    const shape = (u) => {                                  // u: 0 at the base → 1 at the tip; returns r/Rb  (§6.8 [53])
+      if (p.nose_shape === 'cone') return 1 - u;
+      if (p.nose_shape === 'ogive') { const L = 1, rho = (1 + L * L) / 2, x = 1 - u; return Math.sqrt(Math.max(0, rho * rho - (L - x) * (L - x))) + 1 - rho; }
+      return Math.sqrt(Math.max(0, 1 - u * u));             // ellipsoid
+    };
+    const outer = [], inner = [], Li = Math.max(p.hub_front_mm + 1, Ln - p.nose_wall_mm * 1.5);
+    for (let i = 0; i <= n; i++) { const u = i / n; outer.push([Rb * shape(u), Ln * u]); }
+    for (let i = 0; i <= n; i++) { const u = i / n; inner.push([Ri * shape(u), Li * u]); }
+    const prof = [...outer.slice().reverse(), ...inner];
+    prof[0] = [0, Ln]; prof[prof.length - 1] = [0, Li];
+    return { mesh: revolve(prof, det.round), length_mm: Ln, base_mm: 2 * Rb };
+  }
+  // Exit ring (§5.8 p. 3): a round tube through the three exit edges at z = L_s, radius R.
+  function rim(p, d, det) {
+    const loop = [];
+    for (let i = 0; i < det.round * 2; i++) { const a = TAU * i / (det.round * 2); loop.push([d.R * Math.cos(a), d.R * Math.sin(a), d.Ls]); }
+    return sweepTube(loop, p.rim_mm / 2, Math.max(8, det.round / 4), true);
+  }
+
+  // Resolve the derived defaults (wall, hub), then build every printable part — meshes in mm, each standing on the bed.
+  function resolve(input = {}) {
+    const p = { ...DEFAULTS, ...input };
+    const wanted = p.wall_mm ?? Math.max(0.008 * p.diameter_mm, 3 * (p.line_mm || 1.125 * p.nozzle_mm));
+    const wf = wallForNozzle({ nozzle_mm: p.nozzle_mm, layer_mm: p.layer_mm, line_mm: p.line_mm, wanted_mm: wanted });
+    if (p.hub_od_mm == null) p.hub_od_mm = Math.max(p.hub_ratio * p.diameter_mm, (p.bore === 'bearings' ? p.bearing_od_mm : p.bore_mm) + 2 * wf.T(3));
+    // L/D: the rule's 0.9 (§7), raised when the blades would pass closer than 3 walls at the smallest opening angle
+    // (§6.2 check 2: g = (L_s − (R − r_h)·cot α_min)/(N·n_t) · sin α_min ≥ 3t). First run: 0.9 gave 6.0 mm for 3t = 7.5 mm.
+    if (p.ld == null) {
+      const aMin = Math.min(...(p.angle_mode === 'variable' ? [p.a1_deg, p.a2_deg, p.a3_deg] : [p.alpha_deg])) * Math.PI / 180;
+      const R = p.diameter_mm / 2, rh = p.hub_od_mm / 2;
+      const need = ((R - rh) / Math.tan(aMin) + 3 * wf.wall_mm * p.blades * p.turns / Math.sin(aMin)) / p.diameter_mm;
+      p.ld = Math.max(p.angle_mode === 'variable' ? 0.9 : 0.8, Math.ceil(need * 100) / 100);
+    }
+    return { p, wf };
+  }
+  function build(input = {}) {
+    const { p, wf } = resolve(input);
+    const det = DETAIL[p.detail] || DETAIL.medium, wall = wf.wall_mm, d = dims(p, wall);
+    const rotor = mesh();
+    for (let k = 0; k < p.blades; k++) append(rotor, blade(p, d, k, wall, det));
+    append(rotor, hub(p, d, det));
+    for (const t of ties(p, d, wall, det)) append(rotor, t);
+    if (p.rim) append(rotor, rim(p, d, det));
+    const lo = bounds(rotor).lo; translate(rotor, [0, 0, -lo[2]]);
+    const parts = { rotor };
+    let noseInfo = null;
+    if (p.nose) { noseInfo = nose(p, d, det); parts.nose = noseInfo.mesh; }
+    return { params: p, wall: wf, dims: d, checks: checks(p, d, wall), nose: noseInfo && { length_mm: noseInfo.length_mm, base_mm: noseInfo.base_mm }, parts, lift_mm: -lo[2] };
+  }
+
+  // ---------------------------------------------------------------- binary STL (researches/03 §2)
+  // 80-byte header (must not start with "solid"), uint32 count, 50 bytes per triangle, little-endian. [NOT-TESTED]
+  function toSTL(m, name = 'KATAK') {
+    const n = m.f.length, buf = new ArrayBuffer(84 + 50 * n), dv = new DataView(buf);
+    const head = ('KATAK binary STL - ' + name).slice(0, 80);
+    for (let i = 0; i < head.length; i++) dv.setUint8(i, head.charCodeAt(i) & 0x7f);
+    dv.setUint32(80, n, true);
+    let o = 84;
+    for (const [a, b, c] of m.f) {
+      const A = m.v[a], B = m.v[b], Cc = m.v[c], nn = unit(cross(sub(B, A), sub(Cc, A)));
+      for (const x of [nn, A, B, Cc]) { dv.setFloat32(o, x[0], true); dv.setFloat32(o + 4, x[1], true); dv.setFloat32(o + 8, x[2], true); o += 12; }
+      dv.setUint16(o, 0, true); o += 2;
+    }
+    return new Uint8Array(buf);
+  }
+
+  return { DEFAULTS, DETAIL, build, resolve, alphaAt, wallForNozzle, toSTL, checkClosed, signedVolume, bounds,
+    _: { gridSolid, prism, revolve, sweepTube, profileRadius, mesh, append } };
+})();
+// ===== CORE-END =====
+
+// ---- page (phase A placeholder) — a download of the default rotor
+const out = document.getElementById('out');
+document.getElementById('dl').addEventListener('click', () => {
+  const t0 = performance.now();
+  const r = KATAK.build();
+  const stl = KATAK.toSTL(r.parts.rotor, 'rotor');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([stl], { type: 'model/stl' }));
+  a.download = `katak-rotor-${r.params.diameter_mm}mm.stl`;
+  a.click();
+  out.textContent = `rotor: ${r.parts.rotor.f.length} triangles, wall ${r.wall.wall_mm.toFixed(3)} mm = ${r.wall.lines} lines, ${Math.round(performance.now() - t0)} ms`;
+});
+</script>
+</body>
+</html>

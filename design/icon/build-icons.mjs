@@ -503,3 +503,48 @@ writeFileSync(join(OUT, 'katak-icon-round6.html'), reviewPage('KATAK — ико�
   'По слову владельца: исходный · витки не просвечивают друг через друга · просвечивают, но витки темнее · исходный + окружность для крепления витков.',
   round6));
 console.log('round 6:', round6.map((v) => v.id).join(' '), '+ katak-icon-round6.html');
+
+// =====================================================================================================================
+// Round 7 (owner 2026-11-16 15:56): «D5.20 · Просвечивают, витки темнее · D5.21 · Исходный + обод крепления — эти нравятся.
+// Сделай ещё вариант тёмного с ободом. А вариант "Витки не просвечивают" — не получилась у тебя геометрия».
+// =====================================================================================================================
+const D520 = { ...D515, dark: '#050203', lit: '#24070F', fogTo: '#4A0626' };
+const round7 = [
+  { id: 'd5-20', name: 'D5.20 · Витки темнее (нравится)', note: 'Сохранён для сравнения.', svg: round6.find((v) => v.id === 'd5-20').svg },
+  { id: 'd5-21', name: 'D5.21 · С ободом (нравится)', note: 'Сохранён для сравнения.', svg: round6.find((v) => v.id === 'd5-21').svg },
+  { id: 'd5-22', name: 'D5.22 · Тёмные витки + обод', note: 'Тёмные витки D5.20 крепятся к чёрному ободу D5.21.',
+    svg: svg('KATAK icon D5.22', DARK_PINK_DEFS, `${DARK_PINK_TILE}${rotor3D({ ...D520, rimW: 0.085, rim: '#050203' })}`) },
+  { id: 'd5-23', name: 'D5.23 · Тёмные витки + обод с кромкой', note: 'То же, а на ободе тонкая розовая кромка — как у витков.',
+    svg: svg('KATAK icon D5.23', DARK_PINK_DEFS, `${DARK_PINK_TILE}${rotor3D({ ...D520, rimW: 0.085, rim: '#050203' })}
+  <circle cx="${C}" cy="${C}" r="${f(84 * (1 + 0.085))}" fill="none" stroke="#FF5FB0" stroke-width="1.6" opacity=".9"/>
+  <circle cx="${C}" cy="${C}" r="${f(84 * 1.0)}" fill="none" stroke="#FF5FB0" stroke-width="1.2" opacity=".55"/>`) },
+];
+for (const v of round7) if (!['d5-20', 'd5-21'].includes(v.id)) writeFileSync(join(OUT, `katak-icon-${v.id}.svg`), v.svg);
+writeFileSync(join(OUT, 'katak-icon-round7.html'), reviewPage('KATAK — иконка, круг 7',
+  '<b>KATAK</b> — иконка, круг 7: тёмные витки с ободом',
+  'Владельцу нравятся D5.20 и D5.21; по его слову — вариант тёмного с ободом (D5.22, D5.23).',
+  round7));
+console.log('round 7:', round7.map((v) => v.id).join(' '), '+ katak-icon-round7.html');
+
+// =====================================================================================================================
+// Round 8 (owner 2026-11-16 15:59): «D5.20 · Витки темнее (нравится) — чуть светлее витки». Three lightness steps from D5.20
+// toward D5.15 (the turn colours mixed 25 / 50 / 75 % of the way), and the middle step with the rim of D5.21.
+// =====================================================================================================================
+const between = (t) => ({ ...D515, dark: mix('#050203', '#0D0D0D', t), lit: mix('#24070F', '#4A1030', t), fogTo: mix('#4A0626', '#9E0D57', t) });
+const round8 = [
+  { id: 'd5-20', name: 'D5.20 · Витки темнее (было)', note: 'Исходник для сравнения.', svg: round6.find((v) => v.id === 'd5-20').svg },
+  { id: 'd5-24', name: 'D5.24 · Чуть светлее', note: 'Витки на четверть пути от D5.20 к D5.15.',
+    svg: svg('KATAK icon D5.24', DARK_PINK_DEFS, `${DARK_PINK_TILE}${rotor3D(between(0.25))}`) },
+  { id: 'd5-25', name: 'D5.25 · Ещё светлее', note: 'Витки на полпути от D5.20 к D5.15.',
+    svg: svg('KATAK icon D5.25', DARK_PINK_DEFS, `${DARK_PINK_TILE}${rotor3D(between(0.5))}`) },
+  { id: 'd5-26', name: 'D5.26 · Светлее всего', note: 'Витки на три четверти пути от D5.20 к D5.15.',
+    svg: svg('KATAK icon D5.26', DARK_PINK_DEFS, `${DARK_PINK_TILE}${rotor3D(between(0.75))}`) },
+  { id: 'd5-27', name: 'D5.27 · Ещё светлее + обод', note: 'Витки D5.25 с чёрным ободом крепления, как у D5.21.',
+    svg: svg('KATAK icon D5.27', DARK_PINK_DEFS, `${DARK_PINK_TILE}${rotor3D({ ...between(0.5), rimW: 0.085, rim: '#050203' })}`) },
+];
+for (const v of round8) if (v.id !== 'd5-20') writeFileSync(join(OUT, `katak-icon-${v.id}.svg`), v.svg);
+writeFileSync(join(OUT, 'katak-icon-round8.html'), reviewPage('KATAK — иконка, круг 8',
+  '<b>KATAK</b> — иконка, круг 8: D5.20 чуть светлее',
+  'По слову владельца «D5.20 — чуть светлее витки»: три шага светлоты к D5.15 и средний шаг с ободом.',
+  round8));
+console.log('round 8:', round8.map((v) => v.id).join(' '), '+ katak-icon-round8.html');
