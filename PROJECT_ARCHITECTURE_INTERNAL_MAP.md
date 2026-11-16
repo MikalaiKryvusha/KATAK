@@ -40,8 +40,10 @@ Site + Wishes ──▶ Recommender ──▶ Design ──▶ PhysicsModel ─�
 
 - One HTML file, zero dependencies, works offline from disk — the KEINKT Calibrator pattern the owner pointed to (GOAL.md).
 - The 3D preview is hand-written WebGL, not a library: keeps the file self-contained (decision log in `MASTER_PLAN.md`).
-- The preview shows the owner's installation scheme (ideas/04): horizontal axis, rotor on a fixed axle, front bearing stand,
-  the nose fairing ON THE AXLE 10–100 mm ahead of the rotor (blind bore = axle diameter), generator behind. The page's rotor
+- The preview shows the owner's installation scheme (ideas/04): horizontal axis, rotor on a fixed axle, front bearing housing,
+  the nose fairing ON THE AXLE 10–100 mm ahead of the rotor (blind bore = axle diameter), generator behind; the frame is the
+  original's triangle (ideas/11): a yawing post with a flange, a short arm to the front housing, a long arm under the rotor
+  rising to the generator. The preview is built at the print detail; the power curve follows the AWM brochure (researches/06). The page's rotor
   diagram reads `KATAK.sideView()` — the same geometry as the STL, so the drawing cannot drift from the file.
 
 ## Project hooks (tools/hooks, ported from KUMM — owner 2026-11-16: «посмотри, какие там есть полезные хуки, и заведи себе такие»)

@@ -1262,7 +1262,11 @@ const viewer = (() => {
   function show(r, st) {
     for (const q of parts) { gl.deleteBuffer(q.bp); gl.deleteBuffer(q.bn); }
     const P = KATAK._, p = r.params, D = p.diameter_mm, R = D / 2, Ls = r.dims.Ls;
-    const axD = p.bore === 'bearings' ? st.bearing.d : p.bore_mm, gap = p.nose_gap_mm, ground = -(R + 0.12 * D);
+    // the frame after the original's «Side View» and the drawing of its p. 11 (ideas/11, researches/06 §2.4): a yawing post with
+    // a flange under the front end; from its top a short arm to the front bearing housing and a long arm that runs under the
+    // rotor below its largest radius and rises behind the exit to the generator — with the axle they make the triangle. [NOT-TESTED]
+    const zDeck = -(R + 0.05 * D), ground = zDeck - 0.22 * D;
+    const axD = p.bore === 'bearings' ? st.bearing.d : p.bore_mm, gap = p.nose_gap_mm;
     const xStand = -p.hub_front_mm - gap / 2, xNose = -p.hub_front_mm - gap, xGen = Ls + p.hub_back_mm + 6, genL = 0.18 * D, genD = Math.max(0.22 * D, st.bearing.D + 16);
     const axis = (dx = 0) => (q) => [q[2] + dx, q[0], q[1]];                 // a part built along z → world X
     const up = (dx) => (q) => [q[0] + dx, q[1], q[2] + ground];               // a post built along z → world Z, from the ground
@@ -1271,10 +1275,16 @@ const viewer = (() => {
     parts.push(upload(P.prism('round', axD, xNose - 4, xGen + genL + 12, 24), axis(), [0.66, 0.68, 0.72]));
     const hous = Math.min(gap - 6, st.bearing.B + 6);
     parts.push(upload(P.prism('round', st.bearing.D + 8, xStand - hous / 2, xStand + hous / 2, 32), axis(), [0.32, 0.26, 0.30]));
-    parts.push(upload(P.prism('square', Math.min(12, gap - 4), 0, -ground - (st.bearing.D + 8) / 2, 4), up(xStand), [0.32, 0.26, 0.30]));
     parts.push(upload(P.prism('round', genD, xGen, xGen + genL, 40), axis(), [0.22, 0.20, 0.22]));
-    parts.push(upload(P.prism('square', 14, 0, -ground - genD / 2, 4), up(xGen + genL / 2), [0.32, 0.26, 0.30]));
-    parts.push(upload(P.prism('square', 16, xStand - 20, xGen + genL + 20, 4), (q) => [q[2], q[0], q[1] + ground - 6], [0.32, 0.26, 0.30]));
+    const frameCol = [0.20, 0.20, 0.23], tubeR = Math.max(5, 0.026 * D), postR = 1.4 * tubeR, id = (q) => q;
+    const xDeck = xStand + 0.12 * Ls, xRear = xGen + genL / 2, rc = Math.max(4, Math.min(0.12 * D, xRear - Ls - 2));
+    parts.push(upload(P.prism('round', 2 * postR, 0, zDeck - ground, 24), up(xDeck), frameCol));                 // the yawing post
+    parts.push(upload(P.prism('round', 7 * postR, 0, 4, 32), up(xDeck), frameCol));                              // its flange
+    parts.push(upload(P.sweepTube([[xDeck, 0, zDeck], [xStand, 0, -(st.bearing.D + 8) / 2]], tubeR, 4), id, frameCol));   // short arm
+    const arm = [[xDeck, 0, zDeck], [xRear - rc, 0, zDeck]];
+    for (let i = 1; i <= 8; i++) { const f = Math.PI / 2 * i / 8; arm.push([xRear - rc + rc * Math.sin(f), 0, zDeck + rc - rc * Math.cos(f)]); }
+    arm.push([xRear, 0, -genD / 2]);
+    parts.push(upload(P.sweepTube(arm, tubeR, 4), id, frameCol));                                                // long arm
     if (r.parts.nose) parts.push(upload(r.parts.nose, (q) => [xNose - q[2], q[0], q[1]], [0.96, 0.86, 0.92]));
     const lo = [0, 1, 2].map((i) => Math.min(...parts.map((q) => q.lo[i]))), hi = [0, 1, 2].map((i) => Math.max(...parts.map((q) => q.hi[i])));
     centre = lo.map((x, i) => (x + hi[i]) / 2); radius = Math.max(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]) * 0.62;
