@@ -27,14 +27,22 @@ their STL files. Anchor: «1 · разрез | этажи ядра и юбки �
 - [x] 3. Core: placement — each part stands on z = 0; the skirt turned about the axis to its smallest footprint.
 - [x] 4. Core: `assemblyBlocked(p, d, r_cut)` — the share of skirt points with another blade in front at the same angle and radius.
 - [x] 5. Page: field «Печать по частям» (авто · нет); the parts table in step 5 (name · count · size) and one STL button per part.
-- [x] 6. Tests: `kalculator/test.mjs` part «split» (criteria 2–3, control: D 220 → one part); `tools/ui-run.mjs` case «split»
-      (criterion 1, the downloaded STLs fit the bed).
+- [x] 6. Tests: `kalculator/test.mjs` part «split» (criteria 2–3); `tools/ui-run.mjs` case «split» (criterion 1, the downloaded
+      STLs fit the bed). The control «D 220 → one part» was ticked here before it existed (the judge, finding 5) — it entered
+      with the fixes: «control: D 220 on 220 × 220 × 250 → 1 part».
 - [x] 7. Run report in `testcases/reports/`; a look at the parts (render or preview) by the agent; commit.
-- [ ] 8. `/fable-judge` pass closing the phase — before the operational plan of phase 2 is written.
+- [x] 8. `/fable-judge` pass, 2026-11-16 17:53: REFUTED narrowly — the numbers reproduced, 4 geometry/text defects and false plan
+      lines. Fixed: bugs/02 (sliver skirts on a Z-only overflow), bugs/03 (the floor cut not planar), bugs/04 (the seam not
+      vertical), the warning text, the hint, the harness drive-letter case, these lines. Report
+      `testcases/reports/2026-11-16_split-print-phase1-fixes.md`. A re-judge goes with the close of phase 2.
 
 ## Risks
 
-- (a) Degenerate rows at the ends of a region (width → 0): dropped rows leave a sliver ≤ 0.3 mm — counted by the volume check.
-- (b) The floor plane may cross a blade where z(u, v) is not monotone in v — it is (z_o > z_h), asserted in the test.
-- (b) The bearing seats of the hub must not be cut by a floor plane — the plane is moved off a seat if it falls on one.
+- (a) Degenerate rows at the ends of a region (width → 0): dropped rows leave a sliver ≤ 0.3 mm — the volume check sees it
+  (−1.2 % after the planar cuts of bugs/03).
+- (b) A boundary on the middle surface of the sheet — the faces cross it elsewhere: the vertices are clamped onto the plane and
+  the cylinder (EXP-0006, @guard split-parts-geometry).
+- (b) A floor plane on a bearing seat — the planes are held ≥ seat width + 1 mm from the hub ends in `split()`.
 - (c) Ties and the exit rim cannot be split in this phase — switched off in split mode with a visible warning.
+- (c) The skirt stands on the bed on a few points in its rotor orientation (the judge, finding 11) — its print orientation and
+  supports are phase 2's question.

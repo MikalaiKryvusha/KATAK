@@ -56,7 +56,7 @@
 > <!-- classes: question-already-answered, guard-not-proven-against-threat, shown-as-link,
 >      claim-before-evidence, owner-decision-not-applied, text-in-agents-world,
 >      etalon-from-dirty-tree, shell-lied, escaping-layer, twins-missed,
->      field-dropped-in-rebuild, render-unverified, subagent-overspawn, environment-guessed -->
+>      field-dropped-in-rebuild, render-unverified, subagent-overspawn, environment-guessed, offset-sheet-boundary -->
 >
 > | Class slug | The failure it names |
 > |---|---|
@@ -79,6 +79,21 @@
 > Skill: `/experience` (capture a lesson · recall relevant lessons).
 
 ## Entries
+
+### EXP-0006 · 2026-11-16 · ❌→✅ · #geometry #split #sheet #offset
+class: offset-sheet-boundary
+mechanized: kalculator/test.mjs @guard split-parts-geometry
+**Context:** cutting the rotor's blades (a thin sheet = the middle surface offset ± wall/2 along its normal) into parts by a
+plane (core floors) and by a cylinder (the skirt seam).
+**Tried / did:** set the boundary on the MIDDLE surface (the v where z = z_f, where r = r_cut) and offset the sheet afterwards.
+**Result:** ❌ the two faces of the sheet crossed the boundary at different places: the floor cut ran across the sheet 0.7 mm
+below the plane (the hub in the air, bugs/03) and the seam was inclined (the skirt could not slide in, bugs/04); the volume and
+closedness checks stayed green. ✅ the vertices clamped onto the plane / the cylinder after the offset.
+**Lesson:** a boundary of a thick sheet is a property of the SOLID, not of its middle surface — after offsetting, put the
+boundary vertices onto the cutting surface; check the cut by where the faces lie, not by counts.
+**Repro:** `node kalculator/test.mjs` — part 2b, «bugs/03 … stands on its hub», «bugs/04 … the seam is the cylinder».
+**Trigger:** cutting any offset sheet (a blade, a shell) → clamp onto the cutting surface and assert where the vertices lie.
+**Not for:** cuts along the sheet's own parameter lines that are meant to follow its normal (a blade's root sinking into the hub).
 
 ### EXP-0005 · 2026-11-16 · ❌→✅ · #geometry #normalise #select #tests
 class: field-dropped-in-rebuild
@@ -104,6 +119,7 @@ mechanized: tools/hooks/stamp-gate.mjs — refuses a today-stamp later than the 
 **Repro:** `date '+%Y-%m-%d %H:%M %z'` right before the Write that carries the stamp.
 **Trigger:** writing a time of day into any file → probe `date` first.
 **Not for:** future plans and appointments (tomorrow, or `claim-ok:` on the line).
+**Recurred:** 2026-11-16 16:47 and 18:00 (session 2) — the hook refused both; the method that works: `NOW="$(date …)"` in the same command and the variable in the text, never a typed time.
 
 ### EXP-0003 · 2026-11-16 · ❌→✅ · #svg #icon #design
 class: render-unverified

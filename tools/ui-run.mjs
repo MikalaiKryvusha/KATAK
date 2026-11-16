@@ -49,7 +49,8 @@ check('smoke: the default turbine passes the geometry checks and fits the 220 mm
 await page.screenshot({ path: join(shots, '1-defaults-ru.png'), fullPage: true });
 // ---- 1a. self-contained (owner 2026-11-16 16:50 «HTML наш самодостаточен»): no request beyond the page itself, the tab icon
 // is a data URI, no visible pointer into the repository; the intro: the lede full width, the three cards in one row (16:51)
-const foreign = requests.filter((u) => u !== url && !u.startsWith('data:') && !u.startsWith('blob:'));
+// the drive letter may differ in case between the cwd and Chrome's URL (the phase-1 judge, finding 2) — compare without case
+const foreign = requests.filter((u) => u.toLowerCase() !== url.toLowerCase() && !u.startsWith('data:') && !u.startsWith('blob:'));
 check('self-contained: the page requests no other file', foreign.length === 0, foreign.slice(0, 3).join(' | ') || 'none');
 check('self-contained: the tab icon is a data URI from the inline logo', (await page.evaluate(() => (document.querySelector('link[rel=icon]') || {}).href || '')).startsWith('data:image/svg+xml'));
 check('self-contained: no «researches/» in the visible text', !/researches\//.test(await page.evaluate(() => document.body.innerText)));
@@ -129,6 +130,11 @@ for (const id of ['floor1', 'floor2', 'skirt']) {
 await page.screenshot({ path: join(shots, '1f-split-280.png'), fullPage: true });
 await setField('diameter_mm', '220'); await page.waitForTimeout(1200);
 check('control: D 220 fits whole → no parts table', !(await page.locator('#parts').isVisible()));
+// bugs/02 on the user path: a rotor too tall only — floors, no sliver skirts
+await setField('bed_z_mm', '150'); await page.waitForTimeout(1200);
+const wz = await page.locator('#warnings').innerText();
+check('bugs/02: D 220 on Z 150 → «печатается из 2 этажей ядра», no skirt row', /печатается из 2 этажей ядра/.test(wz) && !/Юбка лопасти/.test(await page.locator('#parts').innerText()), (wz.match(/Ротор выше стола[^.]*\./) || ['none'])[0]);
+await setField('bed_z_mm', '250'); await page.waitForTimeout(1000);
 
 // ---- 3. «by power»: the page picks the diameter
 await setField('mode', 'power'); await setField('target_w', '5'); await setField('target_v', '6');

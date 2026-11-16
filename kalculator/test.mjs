@@ -116,6 +116,25 @@ console.log('2b. split');
   check('assembly path D 280: no skirt point blocked from the front', sp.blocked === 0, `${(100 * sp.blocked).toFixed(1)} %, wrap ${sp.wrap_deg.toFixed(0)}°`);
   const big = K.split({ ...inp, diameter_mm: 340, detail: 'low' }, { xy: 220, z: 250 });
   check('control: D 340 — the skirt wraps > 120° and its path is blocked', big.blocked > 0.02 && big.wrap_deg > 120, `${(100 * big.blocked).toFixed(1)} %, wrap ${big.wrap_deg.toFixed(0)}°`);
+  // @guard split-parts-geometry (bugs/02, bugs/03, bugs/04)
+  // THREAT:         sliver skirts printed for nothing; a floor printed with its hub in the air; a skirt that cannot slide on
+  // PROVED-AGAINST: the commit «… epic 02 phase 1» (skirt 22 mm at Z 150; hub at 0.685 mm; seam vertices on both sides of r_cut)
+  // GAP:            the seam is checked on vertices, the slide itself is not simulated; one diameter per case
+  // ON-REAL-PATH:   NOT YET — the owner's test print of the parts (epic phase 4)
+  const zOnly = K.split({ ...inp, diameter_mm: 220 }, { xy: 220, z: 150 });
+  check('bugs/02: D 220 on 220 × 220 × 150 → 2 floors, no skirt', zOnly.floors === 2 && !zOnly.parts.some((q) => q.kind === 'skirt'), zOnly.parts.map((q) => q.id).join(', '));
+  const one = K.split({ ...inp, diameter_mm: 220 }, { xy: 220, z: 250 });
+  check('control: D 220 on 220 × 220 × 250 → 1 part (the whole rotor)', one.total === 1, one.parts.map((q) => q.id).join(', '));
+  const hubR = K.resolve(inp).p.hub_od_mm;
+  for (const q of sp.parts.filter((x) => x.kind === 'floor')) {
+    const zHub = Math.min(...q.mesh.v.filter((v) => Math.hypot(v[0], v[1]) <= K.resolve({ ...inp, diameter_mm: 280 }).p.hub_od_mm / 2 + 0.01).map((v) => v[2]));
+    check(`bugs/03: ${q.id} stands on its hub (the lowest hub vertex at z ≈ 0)`, Math.abs(zHub) < 0.01, `${zHub.toFixed(3)} mm`);
+  }
+  const raw = K.split(inp, { xy: 220, z: 250 }, { place: false }), rc = raw.rCut;
+  const coreOut = Math.max(...raw.parts.filter((q) => q.kind === 'floor').flatMap((q) => q.mesh.v.map((v) => Math.hypot(v[0], v[1]))));
+  const skirtIn = Math.min(...raw.parts.find((q) => q.kind === 'skirt').mesh.v.map((v) => Math.hypot(v[0], v[1])));
+  check('bugs/04: the seam is the cylinder r = r_cut — the core within it, the skirt outside it', coreOut <= rc + 1e-6 && skirtIn >= rc - 1e-6, `core ≤ ${coreOut.toFixed(3)}, skirt ≥ ${skirtIn.toFixed(3)}, r_cut ${rc}`);
+  void hubR;
 }
 
 // ---- 3. placement and size

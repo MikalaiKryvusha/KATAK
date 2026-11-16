@@ -626,31 +626,43 @@ const KATAK = (() => {
         for (let m = 1; m < p.blades * p.turns * 2 + 1; m++) { const u2 = u - m / (p.blades * p.turns); if (u2 < d.u0) break; if (r <= ro(u2) && zAt(u2, r) < z) { blocked++; break; } } } }
     return n ? blocked / n : 0;
   }
-  function split(input = {}, bed = { xy: 220, z: 250 }) {
+  // opts.place = false keeps every part where it sits in the rotor (the tests check seams and the assembly path there)
+  function split(input = {}, bed = { xy: 220, z: 250 }, opts = {}) {
     const { p, wf } = resolve(input);
     const det = detailOf(p.detail), wall = wf.wall_mm, d = dims(p, wall), rRoot = d.rh - wall / 2;
     const z0 = -p.hub_front_mm, z1 = d.Ls + p.hub_back_mm, H = z1 - z0, floors = Math.max(1, Math.ceil(H / bed.z));
-    const planes = [-Infinity, ...Array.from({ length: floors - 1 }, (_, i) => z0 + H * (i + 1) / floors), Infinity];
-    const rCut = bed.xy / 2 - SPLIT_MARGIN_MM;
+    const seat = p.bore === 'bearings' ? p.bearing_w_mm + 1 : 0;   // a floor plane never cuts a bearing seat
+    const planes = [-Infinity, ...Array.from({ length: floors - 1 }, (_, i) => Math.min(z1 - seat, Math.max(z0 + seat, z0 + H * (i + 1) / floors))), Infinity];
     const ro = (u) => d.rh + (d.R - d.rh) * Math.pow(u, p.p_exp);
-    const vR = (u) => (rCut - rRoot) / (ro(u) - rRoot);    // v of the radius r_cut along the generator (> 1: the edge is inside)
+    const vR = (rc) => (u) => (rc - rRoot) / (ro(u) - rRoot);   // v of the radius rc along the generator (> 1: the edge is inside)
     const vZ = (u, z) => {                                  // v of the height z along the generator (z is linear in v)
       if (!Number.isFinite(z)) return z;
       const zo = d.Ls * Math.pow(u, p.q_exp), zh = zo - (ro(u) - d.rh) / Math.tan(alphaAt(p, u));
       return (z - zh) / ((zo - zh) * (ro(u) - rRoot) / Math.max(1e-9, ro(u) - d.rh));
     };
-    const parts = [];
-    for (let i = 0; i < floors; i++) {
-      const m = mesh();
-      for (let k = 0; k < p.blades; k++) append(m, blade(p, d, k, wall, det, { ua: d.u0, ub: 1, lo: (u) => vZ(u, planes[i]), hi: (u) => Math.min(vR(u), vZ(u, planes[i + 1])) }));
-      append(m, hubPart(p, d, det, Math.max(z0, planes[i]), Math.min(z1, planes[i + 1])));
-      parts.push({ id: `floor${i + 1}`, kind: 'floor', index: i + 1, of: floors, count: 1, mesh: m });
-    }
-    const uc = Math.min(1, Math.max(d.u0, Math.pow(Math.max(0, (rCut - d.rh) / (d.R - d.rh)), 1 / p.p_exp)));
-    if (uc < 1) parts.push({ id: 'skirt', kind: 'skirt', count: p.blades, mesh: blade(p, d, 0, wall, det, { ua: uc, ub: 1, lo: vR, hi: () => 1 }) });
-    for (const part of parts) { place(part.mesh, part.kind === 'skirt'); part.size = bounds(part.mesh).size; }
+    // the boundaries are set on the blade's middle surface and the sheet is offset along its normal, so its two faces cross a
+    // plane / a cylinder at different places: the vertices are clamped onto the plane (bugs/03 — a floor stands on its hub)
+    // and onto the cylinder r = r_cut (bugs/04 — the seam is vertical, a move along the axis slides along it)
+    const clampZ = (m, za, zb) => { for (const q of m.v) q[2] = Math.min(zb, Math.max(za, q[2])); return m; };
+    const clampR = (m, rc, outside) => { for (const q of m.v) { const r = Math.hypot(q[0], q[1]); if (r < 1e-9) continue;
+      const t = outside ? Math.max(r, rc) : Math.min(r, rc); if (t !== r) { q[0] *= t / r; q[1] *= t / r; } } return m; };
+    const buildFloors = (rc) => planes.slice(0, -1).map((za, i) => {
+      const zb = planes[i + 1], m = mesh();
+      for (let k = 0; k < p.blades; k++) {
+        const bl = clampZ(blade(p, d, k, wall, det, { ua: d.u0, ub: 1, lo: (u) => vZ(u, za), hi: (u) => Math.min(vR(rc)(u), vZ(u, zb)) }), za, zb);
+        append(m, Number.isFinite(rc) ? clampR(bl, rc, false) : bl);
+      }
+      append(m, hubPart(p, d, det, Math.max(z0, za), Math.min(z1, zb)));
+      return { id: `floor${i + 1}`, kind: 'floor', index: i + 1, of: floors, count: 1, mesh: m };
+    });
+    // bugs/02: the radial cut only when a floor does not fit the bed in X/Y — a rotor too tall but narrow enough gets floors only
+    let rCut = Infinity, parts = buildFloors(rCut);
+    if (!parts.every((q) => { const s = bounds(q.mesh).size; return s[0] <= bed.xy && s[1] <= bed.xy; })) { rCut = bed.xy / 2 - SPLIT_MARGIN_MM; parts = buildFloors(rCut); }
+    const uc = Number.isFinite(rCut) ? Math.min(1, Math.max(d.u0, Math.pow(Math.max(0, (rCut - d.rh) / (d.R - d.rh)), 1 / p.p_exp))) : 1;
+    if (uc < 1) parts.push({ id: 'skirt', kind: 'skirt', count: p.blades, mesh: clampR(blade(p, d, 0, wall, det, { ua: uc, ub: 1, lo: vR(rCut), hi: () => 1 }), rCut, true) });
+    for (const part of parts) { if (opts.place !== false) place(part.mesh, part.kind === 'skirt'); part.size = bounds(part.mesh).size; }
     const fits = parts.every((q) => q.size[0] <= bed.xy && q.size[1] <= bed.xy && q.size[2] <= bed.z);
-    return { parts, floors, rCut, total: parts.reduce((s, q) => s + q.count, 0), wrap_deg: 360 * p.turns * (1 - uc),
+    return { parts, floors, rCut, total: parts.reduce((s, q) => s + q.count, 0), wrap_deg: uc < 1 ? 360 * p.turns * (1 - uc) : 0,
       blocked: uc < 1 ? assemblyBlocked(p, d, rCut, uc) : 0, fits, params: p };
   }
 
@@ -910,7 +922,7 @@ const I18N = {
       ties: 'осевые стойки между витками; металлические шпильки будут добавлены в следующей версии', rim: 'автоматически при диаметре от 400 мм',
       nose_gap_mm: 'между ротором и обтекателем располагается стойка переднего подшипника',
       detail: '10 % соответствует грубой сетке, 100 % наиболее плотной; превью и файлы STL строятся с этой детализацией',
-      split: 'если ротор больше стола, он режется на этажи ядра и три юбки; детали собираются вдоль оси со стороны носа',
+      split: 'если ротор больше стола, он режется на этажи ядра и юбки лопастей; детали собираются вдоль оси со стороны носа',
     },
     o: {
       sea: 'морская поверхность', snow: 'снег, лёд, отмели', open: 'ровная открытая местность, трава', crops: 'посевы, редкие препятствия',
@@ -951,8 +963,9 @@ const I18N = {
       stress: 'Напряжение на кромке при разносе превышает допускаемое. Установка требует электрического торможения.',
       shaft: 'Внутренний диаметр подшипника {b} равен {d} мм и меньше расчётного диаметра стального вала {s} мм. Вал рассчитан на стоянку ротора при скорости ветра {v} м/с из стали с пределом текучести 250 МПа.',
       split: 'Ротор больше стола принтера и печатается из {n} деталей: этажей ядра — {f}, одинаковых юбок — {s}. Сборка: задний этаж, передний этаж, затем юбки; каждая деталь надвигается вдоль оси со стороны носа.',
+      splitFloors: 'Ротор выше стола принтера и печатается из {n} этажей ядра. Сборка: этажи по очереди от заднего к переднему; каждый этаж надвигается вдоль оси со стороны носа.',
       splitBig: 'Детали ротора не помещаются на стол даже по частям. Следует уменьшить диаметр.',
-      splitBlocked: 'Юбка охватывает {a}° витка, больше 120°: при сборке вдоль оси её хвост упирается в соседнюю лопасть. Следует уменьшить диаметр; деление юбки на сегменты появится в следующей версии.',
+      splitBlocked: 'Юбка охватывает {a}° витка; при сборке вдоль оси {b} % её точек задевает соседнюю лопасть. Следует уменьшить диаметр; деление юбки на сегменты появится в следующей версии.',
       splitNoTies: 'При печати по частям стяжки и обод на выходе не строятся.',
       thick: 'Толщина стенки превышает 1,5 % диаметра, что снижает коэффициент мощности.',
       layer: 'Высота слоя {h} мм составляет {p} % диаметра сопла. Рабочий диапазон высоты слоя составляет 25–75 % диаметра сопла.',
@@ -1003,7 +1016,7 @@ const I18N = {
       ties: 'axial posts between the turns; metal threaded rods will follow in the next version', rim: 'automatic from 400 mm in diameter',
       nose_gap_mm: 'the front bearing stand stands between the rotor and the fairing',
       detail: '10 % gives the coarsest mesh, 100 % the densest; the preview and the STL files use this detail',
-      split: 'when the rotor is larger than the bed, it is cut into core floors and three skirts; the parts assemble along the axis from the nose',
+      split: 'when the rotor is larger than the bed, it is cut into core floors and blade skirts; the parts assemble along the axis from the nose',
     },
     o: {
       sea: 'sea surface', snow: 'snow, ice, mud flats', open: 'flat open terrain, grass', crops: 'crops, few obstacles',
@@ -1044,8 +1057,9 @@ const I18N = {
       stress: 'The tip stress at runaway exceeds the allowable value. The installation requires electrical braking.',
       shaft: 'The bore of bearing {b} is {d} mm, below the computed steel shaft diameter of {s} mm. The shaft is sized for the parked rotor at a wind speed of {v} m/s and for steel with a yield strength of 250 MPa.',
       split: 'The rotor is larger than the printer bed and is printed from {n} parts: core floors — {f}, identical skirts — {s}. Assembly: the rear floor, the front floor, then the skirts; every part slides on along the axis from the nose.',
+      splitFloors: 'The rotor is taller than the printer bed and is printed from {n} core floors. Assembly: the floors one by one from the rear to the front; each floor slides on along the axis from the nose.',
       splitBig: 'The parts do not fit the bed even when split. Reduce the diameter.',
-      splitBlocked: 'A skirt wraps {a}° of the turn, more than 120°: on the axial assembly its tail meets the neighbouring blade. Reduce the diameter; splitting the skirt into segments comes in the next version.',
+      splitBlocked: 'A skirt wraps {a}° of the turn; on the axial assembly {b} % of its points meet the neighbouring blade. Reduce the diameter; splitting the skirt into segments comes in the next version.',
       splitNoTies: 'Ties and the exit rim are not built for a print from parts.',
       thick: 'The wall exceeds 1.5 % of the diameter, which lowers the power coefficient.',
       layer: 'The layer height of {h} mm is {p} % of the nozzle diameter. The working range of the layer height is 25–75 % of the nozzle diameter.',
@@ -1197,8 +1211,9 @@ function renderWarnings() {
   // parts (epic 02) the page names the parts and the order of assembly instead
   const sp = last.split;
   if (sp) {
-    list.push([sp.fits ? 'ok' : 'bad', sp.fits ? fill(t.w.split, { n: sp.total, f: sp.floors, s: sp.total - sp.floors }) : t.w.splitBig]);
-    if (sp.blocked > 0) list.push(['warn', fill(t.w.splitBlocked, { a: fmt(sp.wrap_deg) })]);
+    const skirts = sp.total - sp.floors;
+    list.push([sp.fits ? 'ok' : 'bad', !sp.fits ? t.w.splitBig : skirts ? fill(t.w.split, { n: sp.total, f: sp.floors, s: skirts }) : fill(t.w.splitFloors, { n: sp.floors })]);
+    if (sp.blocked > 0) list.push(['warn', fill(t.w.splitBlocked, { a: fmt(sp.wrap_deg), b: fmt(sp.blocked * 100, 1) })]);
     if (p.ties > 0 || p.rim) list.push(['warn', t.w.splitNoTies]);
   } else if (last.build && (Math.max(last.build.size[0], last.build.size[1]) > num('bed_mm') || last.build.size[2] > num('bed_z_mm'))) list.push(['bad', t.w.bed]);
   $('#warnings').innerHTML = list.map(([c, txt]) => `<li class="${c}">${txt}</li>`).join('');
