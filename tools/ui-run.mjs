@@ -112,12 +112,13 @@ check('defaults: the site is Minsk', JSON.stringify(site) === JSON.stringify({ v
 check('result: «Наибольшая мощность при 14 м/с» is shown', /Наибольшая мощность при 14 м\/с/.test(await specText('#res-spec')));
 check('chart: the 14 m/s mark reads «максимум 14,0»', (await page.locator('#chart').innerText().catch(() => '')) !== null && (await page.locator('#chart').evaluate((s) => s.textContent)).includes('максимум 14,0'));
 check('defaults: 608 on the bearing row of the print table', /608 · 8×22×7 мм/.test(await specText('#print-spec')));
-// the 608 bore (8 mm) is below the computed steel shaft at D 220 → the page says so; control — 6001 (12 mm) → no such line
-const ws = await page.locator('#warnings').innerText();
-check('defaults: «Внутренний диаметр подшипника 608 равен 8 мм и меньше расчётного диаметра стального вала …»', /Внутренний диаметр подшипника 608 равен 8 мм и меньше расчётного диаметра стального вала \d+,\d мм/.test(ws), (ws.match(/Внутренний диаметр[^.]*\./) || ['none'])[0]);
-await setField('bearing', '6001');
-check('control: bearing 6001 (12 mm) → no shaft warning', !/Внутренний диаметр подшипника/.test(await page.locator('#warnings').innerText()));
-await setField('bearing', '608');
+// the axle on two supports (owner 18:55 «8 мм стержен ЗАПРОСТО выбержит такую турбину»): at D 220 the 8 mm axle has a safety
+// factor ≈ 3 — the results name it, no warning; control — D 600 on the same 8 mm axle → «не выдерживает» (the factor < 1)
+const ws = await page.locator('#warnings').innerText(), axleRow = (await specText('#res-spec')).match(/Запас прочности оси 8 мм[^\t\n]*\t\s*([\d,]+)/);
+check('defaults: no axle warning; «Запас прочности оси 8 мм (IEC 61400-2: не ниже 3,3)» ≈ 3', !/не выдерживает/.test(ws) && axleRow && Number(axleRow[1].replace(',', '.')) > 2.5, axleRow ? axleRow[1] : 'no row');
+await setField('diameter_mm', '600'); await page.waitForTimeout(1500);
+check('control: D 600 on the 8 mm axle → «Ось диаметром 8 мм под подшипник 608 не выдерживает …»', /Ось диаметром 8 мм под подшипник 608 не выдерживает/.test(await page.locator('#warnings').innerText()));
+await setField('diameter_mm', '220'); await page.waitForTimeout(1200);
 
 // ---- 1d. the layer outside 25–75 % of the nozzle warns (researches/02 §4); control — back to 0.4, the warning goes
 await setField('nozzle_mm', '0.2');

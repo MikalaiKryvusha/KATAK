@@ -793,10 +793,14 @@ const KATAK = (() => {
     const q0 = m.cq0 * 0.5 * rho * A * vIn * vIn * R;
     // loads, §5.1: parking at Ve50 (Cd = 1.5 on A) governs; operation at the brake speed with Ct_design = 1.0
     const fPark = 0.5 * rho * s.ve50 * s.ve50 * 1.5 * A, fOp = 1.0 * 0.5 * rho * A * vOut * vOut;
-    // shaft, §5.3: steel S_y 250 MPa, n = 3.3 (IEC γf·γm); M at the rear bearing with the overhang to the rotor's middle
-    const Ls = p.ld * D, a = Ls / 2 + p.hub_back_mm / 1000;
-    const M = fPark * a, T = q(vOut, m.lamOpt);
-    const dShaft = Math.cbrt(32 * 3.3 / (Math.PI * 250e6) * Math.sqrt(M * M + 0.75 * T * T)) * 1000;
+    // shaft, §5.3: steel S_y 250 MPa, n = 3.3 (IEC γf·γm). The axle is held at BOTH ends — the front bearing housing and the
+    // generator (ideas/04, the original's frame, researches/06 §2.4): a beam on two supports with the rotor's load at its
+    // middle, M = F·L/4 over the span L (owner 2026-11-16 18:55: «Я почти УВЕРЕН, что 8 мм стержен ЗАПРОСТО выбержит такую
+    // турбину» — the cantilever from the rear bearing used before doubled M). [NOT-TESTED]
+    const Ls = p.ld * D, span = Ls + (p.hub_front_mm + p.hub_back_mm + (p.nose_gap_mm ?? 40) / 2 + 6) / 1000 + 0.09 * D, a = span / 4;
+    const M = fPark * a, T = q(vOut, m.lamOpt), Meq = Math.sqrt(M * M + 0.75 * T * T);
+    const dShaft = Math.cbrt(32 * 3.3 / (Math.PI * 250e6) * Meq) * 1000;
+    const shaftFactor = (dmm) => 250e6 * Math.PI * Math.pow(dmm / 1000, 3) / (32 * Meq);   // the safety factor of a steel axle of d mm
     const bearing = BEARINGS.find((b) => b.d >= dShaft) || BEARINGS[BEARINGS.length - 1];
     // centrifugal stress, §5.2: thin ring at the tip σ = ρ_m·v_tip², at the runaway speed λ_run·V_out
     const mat = MATERIALS[s.material] || MATERIALS.ASA;
@@ -806,7 +810,7 @@ const KATAK = (() => {
       pRatedEl, pMaxEl: pEl(vOut), rpm: { mean: nOf(vHub), rated: nRated, run: 60 * m.lamRun * vOut / (Math.PI * D) },
       torque: { rated: q(vRated, m.lamOpt), start: q0 },
       loads: { park: fPark, op: fOp, moment: M, overhang_m: a },
-      shaft: { d_mm: dShaft, bearing }, stress: { vTipRun, sigmaRing, allow: mat.sz / 3.3, ok: sigmaRing <= mat.sz / 3.3 },
+      shaft: { d_mm: dShaft, bearing, factor: shaftFactor, span_m: span }, stress: { vTipRun, sigmaRing, allow: mat.sz / 3.3, ok: sigmaRing <= mat.sz / 3.3 },
       material: mat,
     };
   }
@@ -968,7 +972,7 @@ const I18N = {
     },
     r: {
       wall: 'Толщина стенки лопасти', layer: 'Высота слоя и ширина линии', ld: 'Отношение длины к диаметру', len: 'Длина ротора', hub: 'Диаметр ступицы',
-      size: 'Габарит печати', mass: 'Масса пластика (ротор и обтекатель)', shaft: 'Минимальный диаметр стального вала', bearing: 'Подшипник',
+      size: 'Габарит печати', mass: 'Масса пластика (ротор и обтекатель)', shaft: 'Минимальный диаметр стального вала', axle: 'Запас прочности оси {d} мм (IEC 61400-2: не ниже 3,3)', bearing: 'Подшипник',
       rpmRated: 'Частота вращения при 12,5 м/с', run: 'Частота вращения разноса', stress: 'Напряжение на кромке при разносе',
       rho: 'Плотность воздуха', weibull: 'Параметры Вейбулла c и k', wind: 'Мощность ветрового потока через ротор', rated: 'Мощность при 12,5 м/с', maxP: 'Наибольшая мощность при 14 м/с',
       cf: 'Коэффициент использования установленной мощности', nose: 'Обтекатель', lines: ['линия', 'линии', 'линий'],
@@ -989,7 +993,7 @@ const I18N = {
       overhang: 'Угол нависания у выходной кромки равен {a}° и превышает 55°. Для печати требуются древовидные поддержки.',
       material: 'Выбранный материал не предназначен для наружной установки. Для эксплуатации под солнцем рекомендуется ASA.',
       stress: 'Напряжение на кромке при разносе превышает допускаемое. Установка требует электрического торможения.',
-      shaft: 'Внутренний диаметр подшипника {b} равен {d} мм и меньше расчётного диаметра стального вала {s} мм. Вал рассчитан на стоянку ротора при скорости ветра {v} м/с из стали с пределом текучести 250 МПа.',
+      shaft: 'Ось диаметром {d} мм под подшипник {b} не выдерживает стоянку ротора при скорости ветра {v} м/с: напряжение в ней выше предела текучести стали 250 МПа. Следует выбрать подшипник с внутренним диаметром не меньше {s} мм.',
       split: 'Ротор больше стола принтера и печатается из {n} деталей: этажей ядра — {f}, одинаковых юбок — {s}. Сборка: задний этаж, передний этаж, затем юбки; каждая деталь надвигается вдоль оси со стороны носа.',
       splitFloors: 'Ротор выше стола принтера и печатается из {n} этажей ядра. Сборка: этажи по очереди от заднего к переднему; каждый этаж надвигается вдоль оси со стороны носа.',
       splitBig: 'Детали ротора не помещаются на стол даже по частям. Следует уменьшить диаметр.',
@@ -1064,7 +1068,7 @@ const I18N = {
     },
     r: {
       wall: 'Blade wall thickness', layer: 'Layer height and line width', ld: 'Length-to-diameter ratio', len: 'Rotor length', hub: 'Hub diameter',
-      size: 'Build size', mass: 'Plastic mass (rotor and fairing)', shaft: 'Minimum steel shaft diameter', bearing: 'Bearing',
+      size: 'Build size', mass: 'Plastic mass (rotor and fairing)', shaft: 'Minimum steel shaft diameter', axle: 'Safety factor of the {d} mm axle (IEC 61400-2: at least 3.3)', bearing: 'Bearing',
       rpmRated: 'Rotational speed at 12.5 m/s', run: 'Runaway rotational speed', stress: 'Tip stress at runaway',
       rho: 'Air density', weibull: 'Weibull parameters c and k', wind: 'Wind power through the rotor', rated: 'Power at 12.5 m/s', maxP: 'Maximum power at 14 m/s',
       cf: 'Capacity factor', nose: 'Fairing', lines: ['line', 'lines', 'lines'],
@@ -1085,7 +1089,7 @@ const I18N = {
       overhang: 'The overhang angle at the exit edge is {a}° and exceeds 55°. Tree supports are required for printing.',
       material: 'The selected material is not intended for outdoor use. ASA is recommended for operation in the sun.',
       stress: 'The tip stress at runaway exceeds the allowable value. The installation requires electrical braking.',
-      shaft: 'The bore of bearing {b} is {d} mm, below the computed steel shaft diameter of {s} mm. The shaft is sized for the parked rotor at a wind speed of {v} m/s and for steel with a yield strength of 250 MPa.',
+      shaft: 'The {d} mm axle of bearing {b} does not withstand the parked rotor at a wind speed of {v} m/s: its stress exceeds the 250 MPa yield strength of steel. Choose a bearing with a bore of at least {s} mm.',
       split: 'The rotor is larger than the printer bed and is printed from {n} parts: core floors — {f}, identical skirts — {s}. Assembly: the rear floor, the front floor, then the skirts; every part slides on along the axis from the nose.',
       splitFloors: 'The rotor is taller than the printer bed and is printed from {n} core floors. Assembly: the floors one by one from the rear to the front; each floor slides on along the axis from the nose.',
       splitBig: 'The parts do not fit the bed even when split. Reduce the diameter.',
@@ -1334,7 +1338,7 @@ function render() {
   const extra = [
     [t.r.wind, `${fmt(ph.windMeanW, 1)} ${unit('W')}`], [t.r.rated, `${fmt(ph.pRatedEl, 1)} ${unit('W')}`], [t.r.maxP, `${fmt(ph.pMaxEl, 1)} ${unit('W')}`], [t.r.cf, `${fmt(ph.cf * 100, 1)} %`],
     [t.r.rpmRated, `${fmt(ph.rpm.rated)} ${unit('rpm')}`], [t.r.run, `${fmt(ph.rpm.run)} ${unit('rpm')}`],
-    [t.r.shaft, `${fmt(ph.shaft.d_mm, 1)} ${unit('mm')}`], [t.r.bearing, `${ph.shaft.bearing.id}`],
+    [t.r.shaft, `${fmt(ph.shaft.d_mm, 1)} ${unit('mm')}`], [t.r.axle.replace('{d}', ((x) => fmt(x, Number.isInteger(x) ? 0 : 1))(p.bore === 'bearings' ? bearing.d : p.bore_mm)), fmt(ph.shaft.factor(p.bore === 'bearings' ? bearing.d : p.bore_mm), 1)], [t.r.bearing, `${ph.shaft.bearing.id}`],
     [t.r.stress, `${fmt(ph.stress.sigmaRing, 1)} / ${fmt(ph.stress.allow, 1)} ${unit('MPa')}`],
   ];
   if (last.build) {
@@ -1358,7 +1362,7 @@ function renderWarnings() {
   if (!ph.stress.ok) list.push(['warn', t.w.stress]);
   // the chosen bearing's bore below the computed steel shaft (§5.3: parked rotor at Ve50, S_y 250 MPa) — the owner's 608 default
   // gives 8 mm against ≈ 10 mm at D 220; the page says so instead of hiding it
-  if (last.g.bore === 'bearings' && last.bearing.d < ph.shaft.d_mm) list.push(['warn', fill(t.w.shaft, { b: last.bearing.id, d: fmt(last.bearing.d), s: fmt(ph.shaft.d_mm, 1), v: fmt(s.ve50) })]);
+  if (last.g.bore === 'bearings' && ph.shaft.factor(last.bearing.d) < 1) list.push(['bad', fill(t.w.shaft, { b: last.bearing.id, d: fmt(last.bearing.d), s: fmt(ph.shaft.d_mm, 1), v: fmt(s.ve50) })]);
   if (geo.wf.wall_mm / p.diameter_mm > 0.015) list.push(['warn', t.w.thick]);
   // the layer outside 25–75 % of the nozzle (researches/02 §4) — matters since the layer default is a fixed 0.2 mm
   const layerShare = geo.wf.layer_mm / p.nozzle_mm;
