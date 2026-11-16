@@ -66,6 +66,20 @@ for (const id of ['#viz-site', '#viz-rotor', '#viz-print', '#chart']) {
   check(`figure ${id} is drawn`, nEl >= 5, `${nEl} elements`);
 }
 
+// ---- 1b'. the (i) buttons (ideas/07): one per field; hover opens the popup, leaving closes it, a click pins it, Esc closes it
+const nField = await page.locator('.field').count(), nInfo = await page.locator('.field .info').count();
+check('ideas/07: every field has an (i) button', nField > 30 && nInfo === nField, `${nInfo} of ${nField}`);
+const ib = page.locator('.info[data-info="v_ref"]'); await ib.scrollIntoViewIfNeeded(); await ib.hover(); await page.waitForTimeout(150);
+const pop = page.locator('#info-pop');
+check('ideas/07: hovering (i) of «Средняя скорость ветра» opens the popup with its title', await pop.isVisible() && /Средняя скорость ветра/.test(await pop.innerText()), (await pop.innerText()).split('\n')[0]);
+await page.screenshot({ path: join(shots, '1g-info-hover.png') });
+await page.mouse.move(5, 5); await page.waitForTimeout(400);
+check('ideas/07: control — the pointer leaves → the popup closes', !(await pop.isVisible()));
+await ib.click(); await page.waitForTimeout(100); await page.mouse.move(5, 5); await page.waitForTimeout(400);
+check('ideas/07: a click pins the popup (it stays when the pointer leaves)', await pop.isVisible());
+await page.keyboard.press('Escape'); await page.waitForTimeout(100);
+check('ideas/07: Esc closes the pinned popup', !(await pop.isVisible()));
+
 // ---- 1c. the owner's print defaults (2026-11-16 16:42–16:43): layer 0.2 mm, wall 2 mm → snapped up to 5 lines of a 0.4 nozzle
 check('defaults: layer field 0.2, wall field 2', (await page.inputValue('#in-layer_mm')) === '0.2' && (await page.inputValue('#in-wall_mm')) === '2',
   `${await page.inputValue('#in-layer_mm')} / ${await page.inputValue('#in-wall_mm')}`);
@@ -204,6 +218,21 @@ check('phone 390 px: no horizontal scroll', overflow <= 0, `${overflow}px`);
 const phoneTops = await page.evaluate(() => [...document.querySelectorAll('.fact')].map((f) => Math.round(f.getBoundingClientRect().top)));
 check('phone 390 px: the three cards stack one under another', phoneTops[0] < phoneTops[1] && phoneTops[1] < phoneTops[2], phoneTops.join('/'));
 await page.screenshot({ path: join(shots, '3-phone-ru.png'), fullPage: true });
+
+// ---- 6b. a phone with a touch screen: a tap on (i) opens the popup, a tap elsewhere closes it (ideas/07)
+{
+  const tctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, locale: 'ru-RU' });
+  const tp = await tctx.newPage(); tp.on('pageerror', (e) => errors.push(String(e)));
+  await tp.goto(url, { waitUntil: 'load' }); await tp.waitForTimeout(1200);
+  const tb = tp.locator('.info[data-info="nozzle_mm"]'); await tb.scrollIntoViewIfNeeded(); await tb.tap(); await tp.waitForTimeout(200);
+  const tpop = tp.locator('#info-pop'), box = await tpop.boundingBox();
+  check('ideas/07: phone — a tap on (i) of «Диаметр сопла» opens the popup inside the screen width', await tpop.isVisible() && /Диаметр сопла/.test(await tpop.innerText()) && box.x >= 0 && box.x + box.width <= 390,
+    box ? `x ${box.x.toFixed(0)}…${(box.x + box.width).toFixed(0)}` : 'none');
+  await tp.screenshot({ path: join(shots, '3b-info-phone.png') });
+  await tp.locator('h1').tap(); await tp.waitForTimeout(200);
+  check('ideas/07: phone — a tap elsewhere closes it', !(await tpop.isVisible()));
+  await tctx.close();
+}
 
 check('no console errors in the whole run', errors.length === 0, errors.join(' | ') || 'none');
 await browser.close();

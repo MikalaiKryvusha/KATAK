@@ -52,6 +52,15 @@ a { color: var(--accent2); }
 .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; }
 .field { display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
 .field label { color: var(--ink); font-weight: 600; }
+/* the (i) button before every field and its popup (ideas/07, owner 2026-11-16 16:33: hover on a desktop, a tap on a phone) */
+.field .lab { display: flex; align-items: flex-start; gap: 6px; }
+.info { flex: none; width: 18px; height: 18px; margin-top: 1px; padding: 0; border-radius: 50%; border: 1px solid var(--accent2); background: transparent; color: var(--accent2); font: 700 11px/16px var(--display); cursor: help; }
+.info:hover, .info:focus-visible, .info[aria-expanded="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); outline: none; }
+#info-pop { position: absolute; z-index: 30; width: min(400px, calc(100vw - 24px)); background: var(--surface2); border: 1px solid var(--accent); border-radius: 12px; padding: 12px 14px; box-shadow: 0 10px 28px rgba(0, 0, 0, .55); font-size: 13.5px; line-height: 1.5; }
+#info-pop h4 { margin: 0 0 8px; font: 600 15px var(--display); color: var(--ink); }
+#info-pop dl { margin: 0; display: grid; gap: 8px; }
+#info-pop dt { color: var(--accent2); font: 600 11.5px var(--display); text-transform: uppercase; letter-spacing: .06em; }
+#info-pop dd { margin: 2px 0 0; color: var(--ink); }
 .field .hint { color: var(--muted); font-size: 12.5px; }
 .field .unit { color: var(--muted); font-weight: 400; }
 .field.auto input::placeholder { color: var(--accent2); opacity: .9; }
@@ -193,6 +202,7 @@ footer { color: var(--muted); font-size: 13px; display: flex; flex-direction: co
   <span>KATAK · MIT · <a href="https://github.com/MikalaiKryvusha/KATAK">github.com/MikalaiKryvusha/KATAK</a></span>
 </footer>
 </div>
+<div id="info-pop" role="dialog" hidden></div>
 <script type="module">
 // ===== CORE-BEGIN (pure functions, no DOM; tested by kalculator/test.mjs) =====
 // The KATAK core: geometry of the printable turbine and the binary STL. Units: millimetres in geometry (the STL boundary),
@@ -950,6 +960,7 @@ const I18N = {
       cutIn: 'включение', meanV: 'средняя', ratedV: 'номинал', cutOut: 'максимум',
       legPower: 'электрическая мощность', legShare: 'доля времени на интервал 0,5 м/с', legMean: 'средняя скорость ветра',
       tipV: 'Скорость ветра', tipP: 'Мощность', tipS: 'Доля времени',
+      infoBtn: 'Пояснение', infoD: 'Что задаёт', infoV: 'Варианты и влияние', infoO: 'Оптимум', infoS: 'Источник',
       parts: 'Детали для печати', part: 'Деталь', count: 'Количество', size: 'Габарит, мм', floor: 'Этаж ядра {i} из {n}', skirt: 'Юбка лопасти',
     },
     w: {
@@ -1044,6 +1055,7 @@ const I18N = {
       cutIn: 'cut-in', meanV: 'mean', ratedV: 'rated', cutOut: 'maximum',
       legPower: 'electrical power', legShare: 'share of time per 0.5 m/s bin', legMean: 'mean wind speed',
       tipV: 'Wind speed', tipP: 'Power', tipS: 'Share of time',
+      infoBtn: 'Explanation', infoD: 'What it sets', infoV: 'Options and their effect', infoO: 'Optimum', infoS: 'Source',
       parts: 'Parts to print', part: 'Part', count: 'Quantity', size: 'Size, mm', floor: 'Core floor {i} of {n}', skirt: 'Blade skirt',
     },
     w: {
@@ -1090,6 +1102,11 @@ function buildForms() {
     wrap.className = 'field' + (type === 'auto' ? ' auto' : ''); wrap.dataset.id = id;
     const lab = document.createElement('label'); lab.htmlFor = 'in-' + id;
     lab.innerHTML = `${T().f[id] ?? id}${o.unit ? ` <span class="unit">${unit(o.unit)}</span>` : ''}`;
+    // the (i) button sits beside the label, outside it: a click on it must not focus the input (ideas/07)
+    const row = document.createElement('div'); row.className = 'lab';
+    const ib = document.createElement('button'); ib.type = 'button'; ib.className = 'info'; ib.textContent = 'i'; ib.dataset.info = id;
+    ib.setAttribute('aria-label', `${T().r.infoBtn}: ${T().f[id] ?? id}`); ib.setAttribute('aria-expanded', 'false');
+    row.append(ib, lab);
     let input;
     if (type === 'sel') {
       input = document.createElement('select');
@@ -1101,11 +1118,44 @@ function buildForms() {
     input.id = 'in-' + id;
     input.value = state[id] ?? def;
     input.addEventListener('input', () => { state[id] = input.value; schedule(); });
-    wrap.append(lab, input);
+    wrap.append(row, input);
     if (T().h[id]) { const h = document.createElement('span'); h.className = 'hint'; h.textContent = T().h[id]; wrap.append(h); }
     box.append(wrap);
   }
 }
+// ---- the (i) popup (ideas/07): one shared element; a mouse hover or keyboard focus opens it beside the button, a click or a
+// tap pins it, Esc / a tap elsewhere / leaving the button and the popup closes it. Content: T().info[id] = { d, v, o, s };
+// a field without a text yet shows its hint. [NOT-TESTED]
+const infoPop = $('#info-pop');
+let infoBtn = null, infoPinned = false, infoTimer = null;
+function infoShow(btn) {
+  clearTimeout(infoTimer);
+  if (infoBtn && infoBtn !== btn) infoBtn.setAttribute('aria-expanded', 'false');
+  const id = btn.dataset.info, t = T(), x = (t.info || {})[id], esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  const rows = x ? [[t.r.infoD, x.d], [t.r.infoV, x.v], [t.r.infoO, x.o], [t.r.infoS, x.s]].filter(([, v]) => v) : [[t.r.infoD, t.h[id] || '—']];
+  infoPop.innerHTML = `<h4>${esc(t.f[id] ?? id)}</h4><dl>${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>`;
+  infoPop.hidden = false; infoBtn = btn; btn.setAttribute('aria-expanded', 'true');
+  const b = btn.getBoundingClientRect(), w = infoPop.offsetWidth, h = infoPop.offsetHeight, pad = 12;
+  let left = b.left + window.scrollX, top = b.bottom + window.scrollY + 6;
+  left = Math.max(window.scrollX + pad, Math.min(left, window.scrollX + document.documentElement.clientWidth - w - pad));
+  if (b.bottom + 6 + h > window.innerHeight && b.top - 6 - h > 0) top = b.top + window.scrollY - h - 6;
+  infoPop.style.left = `${left}px`; infoPop.style.top = `${top}px`;
+}
+function infoHide() { infoPop.hidden = true; infoPinned = false; if (infoBtn) infoBtn.setAttribute('aria-expanded', 'false'); infoBtn = null; }
+const infoLater = () => { if (!infoPinned) { clearTimeout(infoTimer); infoTimer = setTimeout(infoHide, 180); } };
+document.addEventListener('pointerover', (e) => { const b = e.target.closest && e.target.closest('.info'); if (b && e.pointerType === 'mouse' && !infoPinned) infoShow(b); });
+document.addEventListener('pointerout', (e) => { const b = e.target.closest && e.target.closest('.info'); if (b && e.pointerType === 'mouse') infoLater(); });
+infoPop.addEventListener('pointerenter', () => clearTimeout(infoTimer));
+infoPop.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse') infoLater(); });
+document.addEventListener('click', (e) => {
+  const b = e.target.closest && e.target.closest('.info');
+  if (b) { if (infoPinned && infoBtn === b) infoHide(); else { infoShow(b); infoPinned = true; } return; }
+  if (!infoPop.hidden && !infoPop.contains(e.target)) infoHide();
+});
+document.addEventListener('focusin', (e) => { if (e.target.classList && e.target.classList.contains('info') && !infoPinned) infoShow(e.target); });
+document.addEventListener('focusout', (e) => { if (e.target.classList && e.target.classList.contains('info')) infoLater(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !infoPop.hidden) infoHide(); });
+
 const num = (id) => { const v = state[id] ?? FIELDS.find((f) => f[0] === id)[3]; return v === '' || v == null ? null : Number(v); };
 const str = (id) => String(state[id] ?? FIELDS.find((f) => f[0] === id)[3]);
 
@@ -1484,7 +1534,7 @@ const viewer = (() => {
 // the tab icon from the inline logo: the page loads no file outside itself (HOUSE_RULES.md R7) [NOT-TESTED]
 { const logo = $('.brand .logo'); if (logo) { const l = document.createElement('link'); l.rel = 'icon'; l.type = 'image/svg+xml'; l.href = 'data:image/svg+xml,' + encodeURIComponent(new XMLSerializer().serializeToString(logo)); document.head.append(l); } }
 $('#lang-select').value = lang;
-$('#lang-select').addEventListener('change', (e) => { lang = e.target.value; try { localStorage.setItem('katak-lang', lang); } catch { /* private mode */ } applyI18n(); render(); });
+$('#lang-select').addEventListener('change', (e) => { infoHide(); lang = e.target.value; try { localStorage.setItem('katak-lang', lang); } catch { /* private mode */ } applyI18n(); render(); });
 $('#dl-rotor').addEventListener('click', () => download('rotor'));
 $('#dl-nose').addEventListener('click', () => download('nose'));
 applyI18n();
