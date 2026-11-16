@@ -94,6 +94,8 @@ boundary vertices onto the cutting surface; check the cut by where the faces lie
 **Repro:** `node kalculator/test.mjs` — part 2b, «bugs/03 … stands on its hub», «bugs/04 … the seam is the cylinder».
 **Trigger:** cutting any offset sheet (a blade, a shell) → clamp onto the cutting surface and assert where the vertices lie.
 **Not for:** cuts along the sheet's own parameter lines that are meant to follow its normal (a blade's root sinking into the hub).
+**Recurred:** 2026-11-16 18:52 — bugs/05: a printed tie ended with a flat cap on the bare generator line of an inclined blade; the
+end ring is now put onto the real middle surface (@guard ties-inside-blade).
 
 ### EXP-0005 · 2026-11-16 · ❌→✅ · #geometry #normalise #select #tests
 class: field-dropped-in-rebuild

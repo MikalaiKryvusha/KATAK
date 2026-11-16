@@ -73,6 +73,25 @@ for (const shape of ['ellipse', 'ogive', 'cone', 'sigmoid']) {
 {
   const r = K.build({ detail: 'low', ties: 3 });
   check('ties on (3 planes): rotor closed', K.checkClosed(r.parts.rotor).closed);
+  // @guard ties-inside-blade (bugs/05)
+  // THREAT:         a printed tie's end breaks out of the far face of an inclined blade (the owner saw it twice)
+  // PROVED-AGAINST: the commit «fix(kalculator): the (i) popup wide and low …» — flat caps on the bare generator line
+  // GAP:            the default geometry and D 300 only; vertices are tested, not the cap faces between them
+  // ON-REAL-PATH:   NOT YET — the owner's preview with ties on and a print
+  for (const D of [220, 300]) {
+    const { p, wf } = K.resolve({ diameter_mm: D, ties: 3, detail: 'medium' }), d = K._.dims(p, wf.wall_mm), det = K.DETAIL.medium;
+    const tris = []; for (let k = 0; k < p.blades; k++) { const b = K._.blade(p, d, k, wf.wall_mm, det); for (const [a, bb, c] of b.f) tris.push([b.v[a], b.v[bb], b.v[c]]); }
+    const inside = (P) => { let n = 0; const Dr = [1, 0.000123, 0.000457];   // ray casting (Möller–Trumbore), odd hits = inside a blade wall
+      for (const [A, B, C] of tris) { const e1 = [B[0] - A[0], B[1] - A[1], B[2] - A[2]], e2 = [C[0] - A[0], C[1] - A[1], C[2] - A[2]];
+        const h = [Dr[1] * e2[2] - Dr[2] * e2[1], Dr[2] * e2[0] - Dr[0] * e2[2], Dr[0] * e2[1] - Dr[1] * e2[0]], det2 = e1[0] * h[0] + e1[1] * h[1] + e1[2] * h[2];
+        if (Math.abs(det2) < 1e-12) continue; const s = [P[0] - A[0], P[1] - A[1], P[2] - A[2]], uu = (s[0] * h[0] + s[1] * h[1] + s[2] * h[2]) / det2; if (uu < 0 || uu > 1) continue;
+        const q = [s[1] * e1[2] - s[2] * e1[1], s[2] * e1[0] - s[0] * e1[2], s[0] * e1[1] - s[1] * e1[0]], vv = (Dr[0] * q[0] + Dr[1] * q[1] + Dr[2] * q[2]) / det2; if (vv < 0 || uu + vv > 1) continue;
+        if ((e2[0] * q[0] + e2[1] * q[1] + e2[2] * q[2]) / det2 > 1e-9) n++; } return n % 2 === 1; };
+    let ends = 0, out = 0;
+    for (const t of K._.ties(p, d, wf.wall_mm, det)) { const nr = (t.v.length - 2) / 7;
+      for (const idx of [...Array(nr).keys(), ...Array.from({ length: nr }, (_, k) => 6 * nr + k)]) { ends++; if (!inside(t.v[idx])) out++; } }
+    check(`bugs/05: D ${D} — every end vertex of every printed tie lies inside a blade wall`, ends > 0 && out === 0, `${out} of ${ends} outside`);
+  }
   const r2 = K.build({ detail: 'low', rim: true, diameter_mm: 450 });
   check('exit rim on a 450 mm rotor: closed', K.checkClosed(r2.parts.rotor).closed);
   check('defaults: validity checks pass (root rises, blades keep a gap)', r2.checks.warn.length === 0 && K.build({ detail: 'low' }).checks.warn.length === 0, JSON.stringify(K.build({ detail: 'low' }).checks));

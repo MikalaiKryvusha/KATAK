@@ -515,14 +515,23 @@ const KATAK = (() => {
         const A = seg(us[i]), B = seg(us[i + 1]);
         const r = A.r0 + p.tie_at * (A.r1 - A.r0);
         if (r > B.r1 - p.tie_mm) continue;                    // the next turn does not reach this radius
-        const zAt = (S) => S.z0 + (r - S.r0) * (S.z1 - S.z0) / (S.r1 - S.r0);
-        // ends stop at the blades' middle surface: a round rod wider than the blade's axial thickness cannot sit inside an
-        // inclined blade, its edge pokes out on one side (owner 2026-11-16 16:24: «перемычки пробивают лопасти насквозь»);
-        // ties are OFF by default since then
+        // the blade's real middle surface: its root sinks wall/2 into the hub (blade(): rRoot = rh − wall/2), so at radius r the
+        // surface is the generator line taken at r + wall/2 — (wall/2)·cot α higher than the bare line (bugs/05, cause 2)
+        const zAt = (S, rr = r) => S.z0 + (rr - S.r0 + wall / 2) * (S.z1 - S.z0) / (S.r1 - S.r0);
+        // the ends follow the blades: a FLAT cap at the middle surface of the rod's centre still broke out of the inclined blade
+        // by (d/2)·cot α − (t/2)/sin α (owner 2026-11-16 16:24 and again 18:52 «петачный стяжки всё ещё пробивают лопость»,
+        // bugs/05). Every vertex of an end ring is put onto the blade's middle surface at its own angle and radius — the whole
+        // cross-section ends inside the wall. [NOT-TESTED]
         const z0 = zAt(A), z1 = zAt(B);
-        const path = []; const nSeg = 6;
+        const path = []; const nSeg = 6, nr = Math.max(8, det.round / 4);
         for (let j = 0; j <= nSeg; j++) path.push([r * c, r * s, z0 + (z1 - z0) * j / nSeg]);
-        out.push(sweepTube(path, p.tie_mm / 2, Math.max(8, det.round / 4)));
+        const tube = sweepTube(path, p.tie_mm / 2, nr);
+        const onBlade = (S, q) => {                           // the middle surface of the blade near S, at the vertex's angle and radius
+          const th = Math.atan2(q[1], q[0]), dth = Math.atan2(Math.sin(th - thp), Math.cos(th - thp));
+          return zAt(seg(Math.min(1, Math.max(d.u0, S.u + dth / (p.hand * TAU * p.turns)))), Math.hypot(q[0], q[1]));
+        };
+        for (let k = 0; k < nr; k++) { const qa = tube.v[k], qb = tube.v[nSeg * nr + k]; qa[2] = onBlade(A, qa); qb[2] = onBlade(B, qb); }
+        out.push(tube);
       }
     }
     return out;
@@ -828,7 +837,7 @@ const KATAK = (() => {
 
   return { DEFAULTS, DETAIL, SITE_DEFAULTS, CP_PRESETS, TERRAIN, SITE, MATERIALS, BEARINGS, build, split, resolve, sideView, alphaAt, wallForNozzle,
     physics, diameterForPower, density, windAt, gamma, weibullC, toSTL, checkClosed, signedVolume, bounds,
-    _: { gridSolid, prism, revolve, sweepTube, profileRadius, mesh, append } };
+    _: { gridSolid, prism, revolve, sweepTube, profileRadius, mesh, append, ties, dims, blade } };
 })();
 // ===== CORE-END =====
 // =====================================================================================================================
