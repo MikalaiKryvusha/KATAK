@@ -18,6 +18,7 @@ KATAK/
 │   ├── ui-run.mjs         # functional run: drives the page in this machine's Chrome (Playwright), reads it, screenshots
 │   ├── shot.mjs           # a screenshot of any local HTML page in Chrome
 │   ├── export-stl.mjs     # builds the parts with the page's own core and writes binary STL files
+│   ├── embed-icon.mjs     # writes design/icon/katak-icon.svg into the page (ICON-BEGIN…ICON-END); --check = the pair check
 │   ├── render-stl.py      # Blender headless render of an STL to PNG
 │   ├── test-hooks.mjs     # hygiene suite of the four project hooks
 │   └── hooks/             # Claude Code hooks ported from KUMM (see the table below)

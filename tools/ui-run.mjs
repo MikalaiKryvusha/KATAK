@@ -16,7 +16,8 @@ import { mkdirSync, readFileSync } from 'node:fs';
 const a = process.argv.slice(2);
 const shots = a.includes('--shots') ? a[a.indexOf('--shots') + 1] : '.work/tmp/ui-run';
 mkdirSync(shots, { recursive: true });
-const url = pathToFileURL(resolve('kalculator/index.html')).href;
+// --page <html> runs the same cases against another copy of the page (used to prove a guard red on an old version)
+const url = pathToFileURL(resolve(a.includes('--page') ? a[a.indexOf('--page') + 1] : 'kalculator/index.html')).href;
 
 let bad = 0, total = 0;
 const check = (name, ok, got = '') => { total++; if (!ok) bad++; console.log(`${ok ? 'pass' : 'FAIL'} ${name}${got !== '' ? ' — ' + got : ''}`); };
@@ -27,6 +28,8 @@ const page = await ctx.newPage();
 const errors = [];
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 page.on('pageerror', (e) => errors.push(String(e)));
+const requests = [];                                      // every URL the page asks for — the page is self-contained (HOUSE_RULES R7)
+page.on('request', (r) => requests.push(r.url()));
 const settle = () => page.waitForTimeout(700);           // compute is debounced 120 ms, the preview 200 ms
 const setField = async (id, value) => {
   const el = page.locator('#in-' + id);
@@ -44,6 +47,18 @@ check('smoke: the result shows mean power, energy per year, rpm', /Вт/.test(k0
 const warn0 = await page.locator('#warnings').innerText();
 check('smoke: the default turbine passes the geometry checks and fits the 220 mm bed', /удовлетворяет проверкам/.test(warn0) && !/превышает область печати/.test(warn0), warn0.replace(/\s+/g, ' ').slice(0, 160));
 await page.screenshot({ path: join(shots, '1-defaults-ru.png'), fullPage: true });
+// ---- 1a. self-contained (owner 2026-11-16 16:50 «HTML наш самодостаточен»): no request beyond the page itself, the tab icon
+// is a data URI, no visible pointer into the repository; the intro: the lede full width, the three cards in one row (16:51)
+const foreign = requests.filter((u) => u !== url && !u.startsWith('data:') && !u.startsWith('blob:'));
+check('self-contained: the page requests no other file', foreign.length === 0, foreign.slice(0, 3).join(' | ') || 'none');
+check('self-contained: the tab icon is a data URI from the inline logo', (await page.evaluate(() => (document.querySelector('link[rel=icon]') || {}).href || '')).startsWith('data:image/svg+xml'));
+check('self-contained: no «researches/» in the visible text', !/researches\//.test(await page.evaluate(() => document.body.innerText)));
+const intro = await page.evaluate(() => {
+  const r = (el) => el.getBoundingClientRect(), facts = [...document.querySelectorAll('.fact')].map(r), lede = r(document.querySelector('.lede'));
+  return { tops: facts.map((f) => Math.round(f.top)), ledeW: Math.round(lede.width), wrapW: Math.round(r(document.querySelector('.intro')).width), gap: Math.round(facts[0].top - lede.bottom) };
+});
+check('intro 1440 px: three cards in one row under a full-width lede', new Set(intro.tops).size === 1 && intro.ledeW >= intro.wrapW - 2 && intro.gap >= 0 && intro.gap <= 40,
+  `tops ${intro.tops.join('/')}, lede ${intro.ledeW} of ${intro.wrapW}, gap ${intro.gap}px`);
 // ---- 1b. a figure on every step (ideas/04): the wind profile, the rotor side view, the wall cross-section, the power curve
 for (const id of ['#viz-site', '#viz-rotor', '#viz-print', '#chart']) {
   const nEl = await page.locator(id + ' > *').count();
@@ -56,6 +71,16 @@ check('defaults: layer field 0.2, wall field 2', (await page.inputValue('#in-lay
 const psDef = await specText('#print-spec');
 check('defaults: wall «2,08 мм = 5 линий», layer 0,20 mm', /2,08 мм = 5 линий/.test(psDef) && /0,20 \/ 0,45 мм/.test(psDef), psDef.replace(/\s+/g, ' ').slice(0, 90));
 check('defaults: no layer-range warning at nozzle 0.4', !/Высота слоя .* составляет/.test(await page.locator('#warnings').innerText()));
+// the owner's Ender-3 defaults (2026-11-16 16:53–16:54): D 220, PETG, detail 70 %, bearing 608, build volume 220 × 220 × 250
+const defs = await page.evaluate(() => Object.fromEntries(['diameter_mm', 'material', 'detail', 'bearing', 'bed_mm', 'bed_z_mm'].map((id) => [id, document.getElementById('in-' + id).value])));
+check('defaults: D 220, PETG, detail 70, bearing 608, bed 220 × 250', JSON.stringify(defs) === JSON.stringify({ diameter_mm: '220', material: 'PETG', detail: '70', bearing: '608', bed_mm: '220', bed_z_mm: '250' }), JSON.stringify(defs));
+check('defaults: 608 on the bearing row of the print table', /608 · 8×22×7 мм/.test(await specText('#print-spec')));
+// the 608 bore (8 mm) is below the computed steel shaft at D 220 → the page says so; control — 6001 (12 mm) → no such line
+const ws = await page.locator('#warnings').innerText();
+check('defaults: «Внутренний диаметр подшипника 608 равен 8 мм и меньше расчётного диаметра стального вала …»', /Внутренний диаметр подшипника 608 равен 8 мм и меньше расчётного диаметра стального вала \d+,\d мм/.test(ws), (ws.match(/Внутренний диаметр[^.]*\./) || ['none'])[0]);
+await setField('bearing', '6001');
+check('control: bearing 6001 (12 mm) → no shaft warning', !/Внутренний диаметр подшипника/.test(await page.locator('#warnings').innerText()));
+await setField('bearing', '608');
 
 // ---- 1d. the layer outside 25–75 % of the nozzle warns (researches/02 §4); control — back to 0.4, the warning goes
 await setField('nozzle_mm', '0.2');
@@ -73,11 +98,11 @@ const ps8 = await specText('#print-spec');
 check('nozzle 0.8 → a different line count, still whole lines', /= \d+ лини[яий]/.test(ps8) && !/1,26 мм = 3/.test(ps8), ps8.split('\n')[0]);
 await setField('nozzle_mm', '0.4'); await setField('layer_mm', '0.2'); await setField('wall_mm', '2');   // back to the owner's defaults
 
-// ---- 2b. the build height Z is checked on its own: a 150 mm Z cannot take the upright ~196 mm rotor, X/Y 220 can
+// ---- 2b. the build height Z is checked on its own: a 150 mm Z cannot take the upright ~223 mm rotor, X/Y 220 can
 await setField('bed_z_mm', '150');
 check('build height Z 150 mm → «превышает область печати»', /превышает область печати/.test(await page.locator('#warnings').innerText()));
-await setField('bed_z_mm', '240');
-check('control: Z back to 240 mm → no overflow warning', !/превышает область печати/.test(await page.locator('#warnings').innerText()));
+await setField('bed_z_mm', '250');
+check('control: Z back to 250 mm → no overflow warning', !/превышает область печати/.test(await page.locator('#warnings').innerText()));
 
 // ---- 3. «by power»: the page picks the diameter
 await setField('mode', 'power'); await setField('target_w', '5'); await setField('target_v', '6');
@@ -115,6 +140,8 @@ await page.selectOption('#lang-select', 'ru'); await settle();
 await page.setViewportSize({ width: 390, height: 844 }); await settle();
 const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
 check('phone 390 px: no horizontal scroll', overflow <= 0, `${overflow}px`);
+const phoneTops = await page.evaluate(() => [...document.querySelectorAll('.fact')].map((f) => Math.round(f.getBoundingClientRect().top)));
+check('phone 390 px: the three cards stack one under another', phoneTops[0] < phoneTops[1] && phoneTops[1] < phoneTops[2], phoneTops.join('/'));
 await page.screenshot({ path: join(shots, '3-phone-ru.png'), fullPage: true });
 
 check('no console errors in the whole run', errors.length === 0, errors.join(' | ') || 'none');
