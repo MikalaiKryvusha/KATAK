@@ -513,9 +513,6 @@ flow) and `PROJECT_ARCHITECTURE_INTERNAL_MAP.md` (abstractions and their relatio
 
 ## Build
 
-> PLANNED — `kalculator/` and `tools/ui-run.mjs` are created in phase 4 (`MASTER_PLAN.md`); until then the only
-> runnable checks are `node tools/test-hooks.mjs` and `node tools/shot.mjs <page> <png>`.
-
 ```bash
 node kalculator/test.mjs
 ```

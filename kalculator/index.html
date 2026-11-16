@@ -717,8 +717,10 @@ const FIELDS = [
   ['hand', 'turbine', 'sel', '1', { opts: ['1', '-1'] }],
   ['cp_preset', 'turbine', 'sel', 'realistic', { opts: ['realistic', 'optimistic', 'pessimistic'] }],
   ['nozzle_mm', 'print', 'sel', '0.4', { opts: ['0.2', '0.25', '0.3', '0.4', '0.5', '0.6', '0.8', '1.0'] }],
-  ['layer_mm', 'print', 'auto', '', { min: 0.05, max: 0.8, step: 0.02, unit: 'mm' }],
-  ['wall_mm', 'print', 'auto', '', { min: 0.4, max: 10, step: 0.1, unit: 'mm' }],
+  // layer 0.2 mm and wall 2 mm by default — owner 2026-11-16 16:42 «Высота слоя мм по умолчанию 0.2 мм», 16:43 «толщина стенки
+  // ротора по уполчанию 2 мм»; an emptied field still falls back to the core's rule (half the nozzle; 0.8 % of D, ≥ 3 lines)
+  ['layer_mm', 'print', 'auto', '0.2', { min: 0.05, max: 0.8, step: 0.02, unit: 'mm' }],
+  ['wall_mm', 'print', 'auto', '2', { min: 0.4, max: 10, step: 0.1, unit: 'mm' }],
   ['material', 'print', 'sel', 'ASA', { opts: ['ASA', 'PETG', 'PACF', 'ABS', 'PLA'] }],
   ['bed_mm', 'print', 'num', 220, { min: 100, max: 1000, step: 1, unit: 'mm' }],
   ['bed_z_mm', 'print', 'num', 240, { min: 100, max: 1000, step: 1, unit: 'mm' }],
@@ -773,12 +775,12 @@ const I18N = {
       terrain: 'задаёт длину шероховатости z₀ в логарифмическом профиле скорости', site: 'задаёт коэффициент выработки площадки f_site',
       alt_m: 'определяет плотность воздуха по стандартной атмосфере', temp_c: 'определяет плотность воздуха',
       weibull_k: 'значение 2 соответствует распределению Рэлея', ld: 'при пустом поле определяется по условию зазора между витками',
-      cp_preset: 'реалистичная оценка соответствует медиане измерений', wall_mm: 'при пустом поле 0,8 % диаметра, не менее трёх линий',
-      layer_mm: 'при пустом поле половина диаметра сопла', bearing: 'по расчётному диаметру стального вала',
+      cp_preset: 'реалистичная оценка соответствует медиане измерений', wall_mm: 'округляется вверх до целого числа линий; при пустом поле 0,8 % диаметра, не менее трёх линий',
+      layer_mm: 'рабочий диапазон 25–75 % диаметра сопла; при пустом поле половина диаметра сопла', bearing: 'по расчётному диаметру стального вала',
       bore_mm: 'при пустом поле равен внутреннему диаметру подшипника', bed_mm: 'меньшая из сторон стола; ротор печатается вертикально', bed_z_mm: 'наибольшая высота печати; с ней сравнивается длина ротора',
       ties: 'осевые стойки между витками; металлические шпильки будут добавлены в следующей версии', rim: 'автоматически при диаметре от 400 мм',
       nose_gap_mm: 'между ротором и обтекателем располагается стойка переднего подшипника',
-      detail: '10 % соответствует грубой сетке, 100 % наиболее плотной; превью строится при 10 %',
+      detail: '10 % соответствует грубой сетке, 100 % наиболее плотной; превью и файлы STL строятся с этой детализацией',
     },
     o: {
       sea: 'морская поверхность', snow: 'снег, лёд, отмели', open: 'ровная открытая местность, трава', crops: 'посевы, редкие препятствия',
@@ -814,6 +816,7 @@ const I18N = {
       material: 'Выбранный материал не предназначен для наружной установки. Для эксплуатации под солнцем рекомендуется ASA.',
       stress: 'Напряжение на кромке при разносе превышает допускаемое. Установка требует электрического торможения.',
       thick: 'Толщина стенки превышает 1,5 % диаметра, что снижает коэффициент мощности.',
+      layer: 'Высота слоя {h} мм составляет {p} % диаметра сопла. Рабочий диапазон высоты слоя составляет 25–75 % диаметра сопла.',
       big: 'Ротор диаметром более 1 м печатается только как прототип; серийные роторы изготавливаются из стеклопластика.',
       roof: 'Размещение на кровле снижает выработку примерно втрое по сравнению с мачтой на открытой местности. Снижение учтено в расчёте.',
       power: 'Для мощности {w} Вт при скорости ветра {v} м/с требуется ротор диаметром около {d} мм.',
@@ -855,12 +858,12 @@ const I18N = {
       terrain: 'sets the roughness length z₀ of the logarithmic speed profile', site: 'sets the site yield factor f_site',
       alt_m: 'determines the air density by the standard atmosphere', temp_c: 'determines the air density',
       weibull_k: 'the value 2 corresponds to the Rayleigh distribution', ld: 'when empty, follows from the gap condition between the turns',
-      cp_preset: 'the realistic estimate corresponds to the median of measurements', wall_mm: 'when empty, 0.8 % of the diameter, at least three lines',
-      layer_mm: 'when empty, half the nozzle diameter', bearing: 'from the computed steel shaft diameter',
+      cp_preset: 'the realistic estimate corresponds to the median of measurements', wall_mm: 'rounded up to a whole number of lines; when empty, 0.8 % of the diameter, at least three lines',
+      layer_mm: 'working range 25–75 % of the nozzle diameter; when empty, half the nozzle diameter', bearing: 'from the computed steel shaft diameter',
       bore_mm: 'when empty, equals the bearing bore', bed_mm: 'the smaller side of the bed; the rotor is printed upright', bed_z_mm: 'the largest print height; the rotor length is checked against it',
       ties: 'axial posts between the turns; metal threaded rods will follow in the next version', rim: 'automatic from 400 mm in diameter',
       nose_gap_mm: 'the front bearing stand stands between the rotor and the fairing',
-      detail: '10 % gives the coarsest mesh, 100 % the densest; the preview uses 10 %',
+      detail: '10 % gives the coarsest mesh, 100 % the densest; the preview and the STL files use this detail',
     },
     o: {
       sea: 'sea surface', snow: 'snow, ice, mud flats', open: 'flat open terrain, grass', crops: 'crops, few obstacles',
@@ -896,6 +899,7 @@ const I18N = {
       material: 'The selected material is not intended for outdoor use. ASA is recommended for operation in the sun.',
       stress: 'The tip stress at runaway exceeds the allowable value. The installation requires electrical braking.',
       thick: 'The wall exceeds 1.5 % of the diameter, which lowers the power coefficient.',
+      layer: 'The layer height of {h} mm is {p} % of the nozzle diameter. The working range of the layer height is 25–75 % of the nozzle diameter.',
       big: 'A rotor over 1 m in diameter is printed only as a prototype; production rotors are made of glass fibre.',
       roof: 'A roof placement lowers the yield about threefold compared with a mast in open terrain. The reduction is included in the calculation.',
       power: 'A power of {w} W at a wind speed of {v} m/s requires a rotor of about {d} mm in diameter.',
@@ -1032,6 +1036,9 @@ function renderWarnings() {
   if (!ph.material.outdoor) list.push(['warn', t.w.material]);
   if (!ph.stress.ok) list.push(['warn', t.w.stress]);
   if (geo.wf.wall_mm / p.diameter_mm > 0.015) list.push(['warn', t.w.thick]);
+  // the layer outside 25–75 % of the nozzle (researches/02 §4) — matters since the layer default is a fixed 0.2 mm
+  const layerShare = geo.wf.layer_mm / p.nozzle_mm;
+  if (layerShare < 0.25 - 1e-9 || layerShare > 0.75 + 1e-9) list.push(['warn', fill(t.w.layer, { h: fmt(geo.wf.layer_mm, 2), p: fmt(layerShare * 100) })]);
   if (p.diameter_mm > 1000) list.push(['warn', t.w.big]);
   if (s.site === 'roof' || s.site === 'yard') list.push(['warn', t.w.roof]);
   // X/Y against the bed, Z (the rotor printed upright) against the build height — owner 2026-11-16 16:38
@@ -1122,9 +1129,11 @@ function buildParts(detail) {
   const vol = KATAK.signedVolume(r.parts.rotor) + (r.parts.nose ? KATAK.signedVolume(r.parts.nose) : 0);
   return { r, size: KATAK.bounds(r.parts.rotor).size, mass: vol / 1000 * mat.rho, nose: r.nose };
 }
+// the preview is built at the print detail (owner 2026-11-16 16:43 «превью должно строиться при той детализации, которая
+// указана для печати»); 100 % ≈ 81 000 triangles, ≈ 170 ms in the core (Node, measured 2026-11-16) [NOT-TESTED]
 function preview() {
   const t0 = performance.now();
-  const b = buildParts('low');
+  const b = buildParts(last.g.detail);
   last.build = b; last.checks = b.r.checks.warn;
   viewer.show(b.r, last);
   render();

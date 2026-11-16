@@ -8,14 +8,18 @@
 
 ```
 KATAK/
-├── kalculator/            # the product (planned): the browser tool, one HTML file, zero dependencies
+├── kalculator/            # the product: the browser tool, one HTML file, zero dependencies
 │   ├── index.html         # UI + i18n (RU/EN) + the core between CORE-BEGIN / CORE-END markers
 │   └── test.mjs           # node test of the core: physics numbers, mesh closure, STL bytes
 ├── design/
 │   ├── icon/              # icon variants page + the chosen katak-icon.svg
-│   └── flow-map/          # KUIPS sheet: screens and flows of the tool (manifest + frames)
+│   └── flow-map/          # KUIPS sheet: screens and flows of the tool (planned, phase 3)
 ├── tools/
-│   ├── ui-run.mjs         # functional run: drives the page in this machine's Chrome (Playwright), screenshots
+│   ├── ui-run.mjs         # functional run: drives the page in this machine's Chrome (Playwright), reads it, screenshots
+│   ├── shot.mjs           # a screenshot of any local HTML page in Chrome
+│   ├── export-stl.mjs     # builds the parts with the page's own core and writes binary STL files
+│   ├── render-stl.py      # Blender headless render of an STL to PNG
+│   ├── test-hooks.mjs     # hygiene suite of the four project hooks
 │   └── hooks/             # Claude Code hooks ported from KUMM (see the table below)
 ├── researches/            # recon notes (physics, aerodynamics, geometry, STL, web), Russian — owner rule R4
 ├── testcases/             # case sets + reports/<date>_<work>.md of every run
@@ -24,8 +28,8 @@ KATAK/
 ├── .claude/               # skills + settings.json (KAIF hooks wired by `kaif-core wire-hooks`)
 ├── .work/tmp/             # agent temp files, git-ignored (HOUSE_RULES R1)
 ├── GOAL.md                # the owner's vision — verbatim, never edited by the agent
-├── HOUSE_RULES.md         # local law: owner rules R1–R4, stands, environment dossier, tools
-└── README.md · LICENSE    # storefront EN + RU, MIT (planned)
+├── HOUSE_RULES.md         # local law: owner rules R1–R6, stands, environment dossier, tools
+└── README.md · LICENSE    # storefront EN + RU, MIT
 ```
 
 ## What each part is
