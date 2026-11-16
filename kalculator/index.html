@@ -1581,7 +1581,8 @@ const viewer = (() => {
   function show(r, st) {
     for (const q of parts) { gl.deleteBuffer(q.bp); gl.deleteBuffer(q.bn); }
     const P = KATAK._, p = r.params, D = p.diameter_mm, R = D / 2, Ls = r.dims.Ls;
-    // the frame after the original's «Side View» and the drawing of its p. 11 (ideas/11, researches/06 §2.4): a yawing post with
+    // the frame after the original's «Side View» (owner 2026-11-16 18:53 «форма кронштейна не такая, как я тебе в прошюре скидывал»):
+    // a V — the yawing post with
     // a flange under the front end; from its top a short arm to the front bearing housing and a long arm that runs under the
     // rotor below its largest radius and rises behind the exit to the generator — with the axle they make the triangle. [NOT-TESTED]
     const zDeck = -(R + 0.05 * D), ground = zDeck - 0.22 * D;
@@ -1596,7 +1597,7 @@ const viewer = (() => {
     parts.push(upload(P.prism('round', st.bearing.D + 8, xStand - hous / 2, xStand + hous / 2, 32), axis(), [0.32, 0.26, 0.30]));
     parts.push(upload(P.prism('round', genD, xGen, xGen + genL, 40), axis(), [0.22, 0.20, 0.22]));
     const frameCol = [0.20, 0.20, 0.23], tubeR = Math.max(5, 0.026 * D), postR = 1.4 * tubeR, id = (q) => q;
-    const xDeck = xStand + 0.12 * Ls, xRear = xGen + genL / 2, rc = Math.max(4, Math.min(0.12 * D, xRear - Ls - 2));
+    const xDeck = 0.45 * Ls, xRear = xGen + genL / 2, rc = Math.max(4, Math.min(0.12 * D, xRear - Ls - 2));
     parts.push(upload(P.prism('round', 2 * postR, 0, zDeck - ground, 24), up(xDeck), frameCol));                 // the yawing post
     parts.push(upload(P.prism('round', 7 * postR, 0, 4, 32), up(xDeck), frameCol));                              // its flange
     parts.push(upload(P.sweepTube([[xDeck, 0, zDeck], [xStand, 0, -(st.bearing.D + 8) / 2]], tubeR, 4), id, frameCol));   // short arm
