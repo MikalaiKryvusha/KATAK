@@ -65,7 +65,7 @@ for (const pct of [10, 50, 100]) {
   const r = K.build({ detail: pct });
   check(`detail ${pct} %: rotor and nose closed`, K.checkClosed(r.parts.rotor).closed && K.checkClosed(r.parts.nose).closed, `${r.parts.rotor.f.length} triangles`);
 }
-for (const shape of ['ellipse', 'ogive', 'cone']) {
+for (const shape of ['ellipse', 'ogive', 'cone', 'sigmoid']) {
   const r = K.build({ detail: 'low', nose_shape: shape });
   const c = K.checkClosed(r.parts.nose);
   check(`nose ${shape}: closed, positive volume`, c.closed && K.signedVolume(r.parts.nose) > 0, `open ${c.open}, doubled ${c.doubled}`);
@@ -92,6 +92,12 @@ for (const shape of ['ellipse', 'ogive', 'cone']) {
   const slab = og.m.v.filter((p) => Math.abs(p[2] - zMid) < og.b.size[2] * 0.02).map((p) => Math.hypot(p[0] - (og.b.lo[0] + Rb), p[1] - (og.b.lo[1] + og.b.size[1] / 2)) / Rb);
   const got = Math.max(...slab);
   check('ogive nose: radius at mid-length = tangent ogive 0.810·R (ellipsoid would be 0.866)', Math.abs(got - rMid) < 0.02, `${got.toFixed(3)} vs ${rMid.toFixed(3)}`);
+  // «стрела» (ideas/10, the owner's choice Ж): r/R = 2s² − s⁴ → 0.4375 at mid-length (the cone 0.5, the ogive 0.81)
+  const sg = nv('sigmoid'), sRb = sg.b.size[0] / 2, sz = sg.b.lo[2] + sg.b.size[2] / 2;
+  const sMid = Math.max(...sg.m.v.filter((p) => Math.abs(p[2] - sz) < sg.b.size[2] * 0.02).map((p) => Math.hypot(p[0] - (sg.b.lo[0] + sRb), p[1] - (sg.b.lo[1] + sg.b.size[1] / 2)) / sRb));
+  check('«стрела» nose: radius at mid-length = 2s² − s⁴ = 0.4375·R (the cone would be 0.5)', Math.abs(sMid - 0.4375) < 0.02, sMid.toFixed(3));
+  check('«стрела» nose: the tip is rounded, not a needle (a radius ≥ half a line at 1 % of the length)', (() => { const z1 = sg.b.hi[2] - sg.b.size[2] * 0.01;
+    return Math.max(...sg.m.v.filter((p) => p[2] >= z1 - 0.05).map((p) => Math.hypot(p[0] - (sg.b.lo[0] + sRb), p[1] - (sg.b.lo[1] + sg.b.size[1] / 2)))) >= 0.2; })());
 }
 
 // ---- 3. placement and size

@@ -500,6 +500,13 @@ const KATAK = (() => {
     const rb = (p.bore_mm + p.nose_fit_mm) / 2, Lb = Math.min(Ln * 0.6, Math.max(6, 1.5 * p.bore_mm));   // blind bore: depth ≈ 1.5·axle
     const shape = (u) => {                                  // u: 0 at the base → 1 at the tip; returns r/Rb  (§6.8 [53])
       if (p.nose_shape === 'cone') return 1 - u;
+      // «стрела» — the smooth sigmoid r/R = 2s² − s⁴ (researches/04 §3.3; the owner's choice 2026-11-16 17:28 «Ж. гладкая
+      // сигмоида 2u² − u⁴», ideas/10), s = x/L from the tip; its needle tip is rounded by a sphere of one line width so it
+      // prints [AI]. In units of Rb: x = s·Ln/Rb.
+      if (p.nose_shape === 'sigmoid') {
+        const s = 1 - u, rn = Math.max(p.line_mm || 1.125 * p.nozzle_mm, 0.03 * Rb) / Rb, x = s * Ln / Rb;
+        return Math.max(2 * s * s - s ** 4, x <= 2 * rn ? Math.sqrt(Math.max(0, rn * rn - (x - rn) ** 2)) : 0);
+      }
       // the tangent ogive in units of Rb: length L = Ln/Rb (bugs/01 — L = 1 made it the ellipsoid), x from the tip
       if (p.nose_shape === 'ogive') { const L = Ln / Rb, rho = (1 + L * L) / 2, x = (1 - u) * L; return Math.sqrt(Math.max(0, rho * rho - (L - x) * (L - x))) + 1 - rho; }
       return Math.sqrt(Math.max(0, 1 - u * u));             // ellipsoid
@@ -760,7 +767,7 @@ const FIELDS = [
   ['tie_mm', 'print', 'num', 3, { min: 2, max: 12, step: 0.5, unit: 'mm' }],
   ['rim', 'print', 'sel', 'auto', { opts: ['auto', 'yes', 'no'] }],
   ['nose', 'print', 'sel', 'yes', { opts: ['yes', 'no'] }],
-  ['nose_shape', 'print', 'sel', 'ellipse', { opts: ['ellipse', 'ogive', 'cone'] }],
+  ['nose_shape', 'print', 'sel', 'ellipse', { opts: ['ellipse', 'ogive', 'cone', 'sigmoid'] }],
   ['nose_ratio', 'print', 'num', 0.8, { min: 0.6, max: 1.0, step: 0.05 }],
   ['nose_gap_mm', 'print', 'num', 40, { min: 10, max: 100, step: 5, unit: 'mm' }],
 ];
@@ -816,7 +823,7 @@ const I18N = {
       roof: 'кровля здания', yard: 'двор, балкон', diameter: 'по диаметру', power: 'по требуемой мощности', variable: 'переменный, 30°, 45°, 60°',
       fixed: 'постоянный', '1': 'правая', '-1': 'левая', realistic: 'реалистичная', optimistic: 'оптимистичная', pessimistic: 'пессимистичная',
       low: 'низкая', medium: 'средняя', high: 'высокая', ultra: 'сверхвысокая', bearings: 'стальной вал на подшипниках',
-      profile: 'отверстие заданного профиля', solid: 'печатная ось', ellipse: 'эллипсоид', ogive: 'оживало', cone: 'конус',
+      profile: 'отверстие заданного профиля', solid: 'печатная ось', ellipse: 'эллипсоид', ogive: 'оживало', cone: 'конус', sigmoid: 'стрела (гладкая сигмоида)',
       auto: 'авто', round: 'круг', hex: 'шестигранник', d: 'D-образный срез', square: 'квадрат', yes: 'да', no: 'нет',
       ASA: 'ASA, для наружной установки', PETG: 'PETG, для затенённых мест', PACF: 'PA-CF, повышенной прочности', ABS: 'ABS', PLA: 'PLA, только в помещении',
     },
@@ -903,7 +910,7 @@ const I18N = {
       roof: 'building roof', yard: 'yard, balcony', diameter: 'by diameter', power: 'by required power', variable: 'variable, 30°, 45°, 60°',
       fixed: 'constant', '1': 'right-hand', '-1': 'left-hand', realistic: 'realistic', optimistic: 'optimistic', pessimistic: 'pessimistic',
       low: 'low', medium: 'medium', high: 'high', ultra: 'ultra', bearings: 'steel shaft on bearings',
-      profile: 'hole of a given profile', solid: 'printed axle', ellipse: 'ellipsoid', ogive: 'ogive', cone: 'cone',
+      profile: 'hole of a given profile', solid: 'printed axle', ellipse: 'ellipsoid', ogive: 'ogive', cone: 'cone', sigmoid: 'arrow (smooth sigmoid)',
       auto: 'auto', round: 'round', hex: 'hexagon', d: 'D-cut', square: 'square', yes: 'yes', no: 'no',
       ASA: 'ASA, for outdoor use', PETG: 'PETG, for shaded places', PACF: 'PA-CF, high strength', ABS: 'ABS', PLA: 'PLA, indoors only',
     },

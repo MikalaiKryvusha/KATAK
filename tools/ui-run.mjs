@@ -154,6 +154,9 @@ const noseVol = async (shape) => { await setField('nose_shape', shape); const [d
   const f = join(shots, `nose-${shape}.stl`); await dl.saveAs(f); return stlVolume(readFileSync(f)); };
 const vEl = await noseVol('ellipse'), vOg = await noseVol('ogive');
 check('bugs/01: the «оживало» nose STL is ≥ 3 % smaller in volume than the «эллипсоид» one', vOg < 0.97 * vEl, `${vOg.toFixed(0)} vs ${vEl.toFixed(0)} mm³`);
+// ideas/10 — «стрела» (the owner's choice Ж): its own option, a nose far slimmer than the ellipsoid (∫r² ≈ 0.34 against 0.67)
+const vSg = await noseVol('sigmoid');
+check('ideas/10: the «стрела» nose STL is a distinct shape — under 75 % of the «эллипсоид» volume', vSg < 0.75 * vEl && vSg > 0, `${vSg.toFixed(0)} vs ${vEl.toFixed(0)} mm³`);
 await setField('nose_shape', 'ellipse');
 
 // ---- 5. English: no Cyrillic left in the visible text (the language list itself names «Русский»)
