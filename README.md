@@ -36,6 +36,9 @@ computer.
 <p align="center">
   <img src="design/readme/result-en.webp" width="100%" alt="The result: mean power, energy per year, rpm, rotor efficiency, starting torque, storm load, the power curve over the wind distribution, the shaft, the bearing and the plastic">
 </p>
+<p align="center">
+  <img src="design/readme/model-en.webp" width="100%" alt="The 3D view of the installation with a horizontal axis: the nose fairing, the front bearing stand, the rotor on the axle, the generator and the base">
+</p>
 
 ### What it does
 
@@ -121,6 +124,9 @@ MIT — see [LICENSE](LICENSE).
 </p>
 <p align="center">
   <img src="design/readme/result-ru.webp" width="100%" alt="Результат: средняя мощность, энергия за год, обороты, КПД ротора, стартовый момент, нагрузка в бурю, кривая мощности на фоне распределения ветра, вал, подшипник и пластик">
+</p>
+<p align="center">
+  <img src="design/readme/model-ru.webp" width="100%" alt="3D-модель установки с горизонтальной осью: носовой обтекатель, стойка переднего подшипника, ротор на оси, генератор и основание">
 </p>
 
 ### Что умеет
