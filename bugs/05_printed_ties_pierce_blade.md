@@ -1,6 +1,6 @@
 # Bug 05 — the printed ties still pierce the blade: a flat rod end against an inclined blade
 
-**Status:** ✅ DONE (see the status section) · **Severity:** S1 (the owner found it twice: session 1 16:24 «что это у тебя за
+**Status:** 🔧 fixed in the core, guard green; the functional run with ties on is NOT YET — the bug stays open until it is walked · **Severity:** S1 (the owner found it twice: session 1 16:24 «что это у тебя за
 перемычки, которые пробивают лопости насквозь?», session 2 18:52 «петачный стяжки всё ещё пробивают лопость» with a screenshot)
 **Version/build:** `main` at «fix(kalculator): the (i) popup wide and low …» · **When/context:** 2026-11-16 18:52, the owner's
 screenshot of the preview with «Число печатных стяжек» > 0. **Fixing:** this session.
@@ -28,8 +28,8 @@ rim and the hub are surfaces of revolution not ending on blades; the frame of th
 
 ## Guard
 
-`kalculator/test.mjs` part 2: @guard ties-inside-blade — with ties on, every end-ring vertex of every tie lies within the
-blade's axial half thickness of its middle surface (|Δz| ≤ (t/2)/sin α); red on the committed core.
+`kalculator/test.mjs` part 2: @guard ties-inside-blade — with ties on, rays cast through the real blade meshes find every end-ring
+vertex of every tie inside a blade wall (odd hits); red on the committed core.
 
 ## Decisions made without the owner
 
@@ -39,7 +39,7 @@ blade's axial half thickness of its middle surface (|Δz| ≤ (t/2)/sin α); red
 
 `ideas/05_spacer_types_metal_studs.md` (the studs will replace or join the printed ties) · `EXPERIENCE.md` EXP-0006
 
-## ✅ STATUS: DONE (2026-11-16 18:57 +03:00)
+## Status (2026-11-16 18:57 +03:00)
 
 Two causes, both fixed: the flat cap (each end-ring vertex now follows the blade) and the bare generator line (the real middle
 surface is (t/2)·cot α higher — the blade root sinks t/2 into the hub).
