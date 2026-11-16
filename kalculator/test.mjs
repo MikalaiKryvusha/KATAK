@@ -103,5 +103,30 @@ console.log('4. binary STL');
   check('first normal is a unit vector', near(Math.hypot(nx, ny, nz), 1, 1e-4));
 }
 
+// ---- 5. physics against the recon's control examples (researches/01 §3.1, §3.6, §4.1, §5.1)
+console.log('5. physics');
+{
+  check('ρ at sea level, 15 °C = 1.225 kg/m³ (§3.1)', near(K.density(0, 15), 1.225, 0.001), K.density(0, 15).toFixed(4));
+  check('ρ at 1000 m, ISA 8.5 °C = 1.112 kg/m³ (§3.1)', near(K.density(1000, 8.5), 1.112, 0.002), K.density(1000, 8.5).toFixed(4));
+  check('Γ(1.5) = 0.886227', near(K.gamma(1.5), 0.886227, 1e-5), K.gamma(1.5).toFixed(6));
+  check('Rayleigh: c = 2·V̄/√π (§3.3)', near(K.weibullC(5, 2), 2 * 5 / Math.sqrt(Math.PI), 1e-6));
+  const flat = { ...K.SITE_DEFAULTS, v_ref: 5, z_ref: 6, height_m: 6, alt_m: 0, temp_c: 15, weibull_k: 2, site: 'field' };
+  const big = K.physics(flat, K.resolve({ diameter_mm: 1500 }));
+  const windKWh = big.windMeanW * 8.76;
+  check('wind energy through a 1.5 m rotor at 5 m/s Rayleigh = 2264 kWh/yr (§3.6)', Math.abs(windKWh - 2264) < 15, windKWh.toFixed(0));
+  check('AEP of the 1.5 m rotor stays below Betz (1342 kWh/yr)', big.aep < 1342 && big.aep > 50, big.aep.toFixed(0));
+  const small = K.physics({ ...flat, v_ref: 5 }, K.resolve({ diameter_mm: 300 }));
+  check('rpm of D = 0.3 m at 5 m/s, λ 1.8 = 573 (§4.1)', near(60 * 1.8 * 5 / (Math.PI * 0.3), 573, 1) && near(small.model.lamOpt, 1.8, 1e-9), `λ_opt ${small.model.lamOpt}`);
+  const park = K.physics({ ...flat, ve50: 42 }, K.resolve({ diameter_mm: 300 }));
+  check('parking load of D = 0.3 m at Ve50 42 m/s ≈ 115 N (§5.1)', Math.abs(park.loads.park - 115) < 2, park.loads.park.toFixed(1));
+  check('a steel shaft is sized and a bearing picked for it', park.shaft.d_mm > 6 && park.shaft.bearing.d >= park.shaft.d_mm, `${park.shaft.d_mm.toFixed(1)} mm → ${park.shaft.bearing.id}`);
+  const printed = K.physics({ ...K.SITE_DEFAULTS, v_ref: 4.5, z_ref: 6, height_m: 6, site: 'field' }, K.resolve({ diameter_mm: 300 }));
+  check('printed D = 0.3 m at 4.5 m/s: AEP of the order of §3.6 (≈ 8.6 kWh/yr, model differs) → 2…20', printed.aep > 2 && printed.aep < 20, printed.aep.toFixed(1));
+  const pess = K.physics({ ...flat, cp_preset: 'pessimistic' }, K.resolve({ diameter_mm: 1500 }));
+  check('control: the pessimistic preset gives less energy than the realistic one', pess.aep < big.aep, `${pess.aep.toFixed(0)} < ${big.aep.toFixed(0)}`);
+  const dP = K.diameterForPower(5, 6, { ...K.SITE_DEFAULTS });
+  check('«by power»: 5 W at 6 m/s needs a rotor of a few hundred mm', dP > 150 && dP < 600, dP.toFixed(0) + ' mm');
+}
+
 console.log(`-- ${total - bad} of ${total} as expected`);
 process.exit(bad ? 1 : 0);

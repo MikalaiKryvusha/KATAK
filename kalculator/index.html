@@ -4,24 +4,180 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>KATAK — калькулятор турбины Архимеда</title>
+<link rel="icon" type="image/svg+xml" href="../design/icon/katak-icon-d5-21.svg">
 <style>
-/* Phase A placeholder page: the core below is the product of this phase; the full layout (KEINKT Calibrator pattern, Krinik
-   pink) arrives in phase C — plans/01_EPIC_kalculator_prototype.md. */
-:root { --bg:#0D0D0D; --surface:#1A1A1A; --ink:#F2F2F2; --muted:#9A9A9A; --accent:#FF1A8C; color-scheme: dark; }
-body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.5 system-ui, "Segoe UI", sans-serif; }
-main { max-width:900px; margin:0 auto; padding:32px 24px; display:flex; flex-direction:column; gap:16px; }
-h1 { margin:0; font-size:32px; } h1 b { color:var(--accent); }
-button { font:600 16px system-ui; padding:12px 18px; border-radius:8px; border:0; background:var(--accent); color:#fff; cursor:pointer; width:fit-content; }
-pre { background:var(--surface); padding:12px; border-radius:8px; white-space:pre-wrap; }
+/* Layout: desktop first — a procedure sheet like the KEINKT Calibrator (researches/03 §1): a header with the language at the
+   top right, an intro with fact cards, a step navigation, then steps as bands — inputs on the left, what they give on the
+   right; one column on a phone. Palette: the classic Krinik acid pink on near-black (GOAL.md). [NOT-TESTED] */
+:root {
+  --bg: #0D0D0D; --surface: #171217; --surface2: #1F161D; --ink: #F4EEF2; --muted: #A99AA3; --rule: #3A2633;
+  --accent: #FF1A8C; --accent2: #FF5FB0; --accent-ink: #FFFFFF; --glow: #2A0A1C;
+  --ok: #4ADE80; --warn: #FBBF24; --bad: #FF6B6B;
+  --display: "Segoe UI Semibold", "Segoe UI", system-ui, sans-serif; --body: "Segoe UI", system-ui, sans-serif;
+  --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: radial-gradient(1200px 600px at 70% -10%, #2A0A1C 0%, var(--bg) 60%) fixed, var(--bg); color: var(--ink); font: 16px/1.5 var(--body); }
+.wrap { max-width: 1240px; margin: 0 auto; padding: 28px max(24px, env(safe-area-inset-left)) 64px; display: flex; flex-direction: column; gap: 22px; }
+h1, h2, h3 { font-family: var(--display); margin: 0; line-height: 1.15; text-wrap: balance; }
+h1 { font-size: 40px; } h2 { font-size: 24px; } h3 { font-size: 16px; }
+p { margin: 0; max-width: 70ch; }
+a { color: var(--accent2); }
+.top { display: flex; justify-content: space-between; align-items: center; gap: 24px; }
+.brand { display: flex; align-items: center; gap: 16px; }
+.brand img { width: 64px; height: 64px; filter: drop-shadow(0 0 12px rgba(255, 26, 140, .45)); }
+.mark { font: 700 14px var(--display); letter-spacing: .12em; color: var(--accent); text-transform: uppercase; }
+.lang { display: flex; align-items: center; gap: 8px; }
+.lang select, .field select, .field input { font: 15px var(--body); padding: 8px 10px; border: 1px solid var(--rule); background: var(--surface2); color: var(--ink); border-radius: 8px; width: 100%; }
+.lang select { width: auto; min-width: 150px; font-weight: 600; cursor: pointer; }
+.field input:focus, .field select:focus, .lang select:focus-visible, .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.intro { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 28px; align-items: start; }
+.lede { font-size: 18px; color: var(--ink); }
+.facts { display: flex; flex-direction: column; gap: 10px; }
+.fact { background: var(--surface); border: 1px solid var(--rule); border-radius: 12px; padding: 12px 16px; font-size: 14px; color: var(--muted); }
+.fact b { display: block; color: var(--ink); font-family: var(--display); margin-bottom: 2px; }
+.steps-nav { display: flex; border: 1px solid var(--rule); border-radius: 12px; overflow: hidden; background: var(--surface); position: sticky; top: 8px; z-index: 5; }
+.steps-nav a { flex: 1; padding: 10px 14px; text-decoration: none; color: var(--ink); font-size: 14px; border-right: 1px solid var(--rule); display: flex; gap: 8px; align-items: baseline; }
+.steps-nav a:last-child { border-right: 0; }
+.steps-nav a b { color: var(--accent); }
+.steps-nav a:hover { background: var(--surface2); }
+.step { background: var(--surface); border: 1px solid var(--rule); border-radius: 16px; padding: 24px; display: grid; grid-template-columns: 44px minmax(0, 6fr) minmax(0, 5fr); gap: 16px 24px; scroll-margin-top: 64px; }
+.step > .n { width: 40px; height: 40px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font: 700 18px var(--display); box-shadow: 0 0 16px rgba(255, 26, 140, .5); }
+.step .text { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.step .side { display: flex; flex-direction: column; gap: 12px; min-width: 0; color: var(--muted); font-size: 14px; }
+.step.wide .side { grid-column: 2 / -1; }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; }
+.field { display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
+.field label { color: var(--ink); font-weight: 600; }
+.field .hint { color: var(--muted); font-size: 12.5px; }
+.field .unit { color: var(--muted); font-weight: 400; }
+.field.auto input::placeholder { color: var(--accent2); opacity: .9; }
+.btn { display: inline-flex; align-items: center; gap: 8px; font: 600 15px var(--body); padding: 11px 18px; border-radius: 10px; border: 0; background: var(--accent); color: var(--accent-ink); cursor: pointer; box-shadow: 0 0 14px rgba(255, 26, 140, .35); }
+.btn.secondary { background: transparent; color: var(--ink); border: 1px solid var(--rule); box-shadow: none; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.kpi { background: var(--surface2); border: 1px solid var(--rule); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; }
+.kpi .v { font: 700 24px var(--display); color: var(--ink); }
+.kpi .v small { font-size: 13px; color: var(--muted); font-weight: 400; margin-left: 4px; }
+.kpi .l { font-size: 12.5px; color: var(--muted); }
+.kpi.hero { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent), 0 0 18px rgba(255, 26, 140, .25); }
+.cols { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 20px; align-items: start; }
+.chart { width: 100%; height: auto; background: var(--surface2); border: 1px solid var(--rule); border-radius: 12px; }
+.chart text { fill: var(--muted); font: 11px var(--body); }
+table.spec { width: 100%; border-collapse: collapse; font-size: 14px; }
+table.spec td { padding: 6px 4px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+table.spec td:last-child { text-align: right; font-family: var(--mono); color: var(--ink); white-space: nowrap; }
+table.spec td:first-child { color: var(--muted); }
+.notes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.notes li { display: grid; grid-template-columns: 22px 1fr; gap: 6px; color: var(--ink); }
+.notes li::before { font-weight: 700; }
+.notes li.ok::before { content: "✓"; color: var(--ok); }
+.notes li.warn::before { content: "!"; color: var(--warn); }
+.notes li.bad::before { content: "✕"; color: var(--bad); }
+.viewer { position: relative; }
+.viewer canvas { width: 100%; height: 520px; display: block; border-radius: 12px; border: 1px solid var(--rule); background: radial-gradient(circle at 50% 40%, #2A0A1C, #0D0D0D 70%); cursor: grab; touch-action: none; }
+.viewer .cap { position: absolute; left: 12px; bottom: 10px; font-size: 12px; color: var(--muted); pointer-events: none; }
+.note { font-size: 13px; color: var(--muted); }
+footer { color: var(--muted); font-size: 13px; display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--rule); padding-top: 16px; }
+@media (max-width: 1000px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .cols { grid-template-columns: 1fr; } }
+@media (max-width: 760px) {
+  h1 { font-size: 28px; }
+  .wrap { padding: 18px 16px 48px; }
+  .top { flex-direction: column; align-items: flex-start; }
+  .intro, .grid { grid-template-columns: 1fr; }
+  .steps-nav { display: none; }
+  .step { grid-template-columns: 1fr; padding: 16px; }
+  .step.wide .side { grid-column: auto; }
+  .viewer canvas { height: 360px; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 </style>
 </head>
 <body>
-<main>
-  <h1><b>KATAK</b> — Krinik Archimedes Turbine Automated Kalculator</h1>
-  <p>Прототип, фаза A: ядро геометрии. Кнопка собирает ротор с настройками по умолчанию и скачивает STL.</p>
-  <button type="button" id="dl">Скачать STL ротора</button>
-  <pre id="out"></pre>
-</main>
+<div class="wrap">
+
+<header class="top">
+  <div class="brand">
+    <img src="../design/icon/katak-icon-d5-21.svg" width="64" height="64" alt="">
+    <div>
+      <div class="mark">KATAK · Krinik Archimedes Turbine Automated Kalculator</div>
+      <h1 data-i18n="title">Калькулятор спиральной ветротурбины Архимеда</h1>
+    </div>
+  </div>
+  <label class="lang">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z"/></svg>
+    <select id="lang-select" aria-label="Language"><option value="ru">Русский</option><option value="en">English</option></select>
+  </label>
+</header>
+
+<section class="intro">
+  <p class="lede" data-i18n="lede"></p>
+  <div class="facts">
+    <div class="fact"><b data-i18n="f1t"></b><span data-i18n="f1"></span></div>
+    <div class="fact"><b data-i18n="f2t"></b><span data-i18n="f2"></span></div>
+    <div class="fact"><b data-i18n="f3t"></b><span data-i18n="f3"></span></div>
+  </div>
+</section>
+
+<nav class="steps-nav" aria-label="Steps">
+  <a href="#s1"><b>1</b><span data-i18n="n1"></span></a>
+  <a href="#s2"><b>2</b><span data-i18n="n2"></span></a>
+  <a href="#s3"><b>3</b><span data-i18n="n3"></span></a>
+  <a href="#s4"><b>4</b><span data-i18n="n4"></span></a>
+  <a href="#s5"><b>5</b><span data-i18n="n5"></span></a>
+</nav>
+
+<section class="step" id="s1">
+  <div class="n">1</div>
+  <div class="text"><h2 data-i18n="s1t"></h2><div class="grid" data-form="site"></div></div>
+  <div class="side"><p data-i18n="s1p"></p><ul class="notes" id="site-notes"></ul></div>
+</section>
+
+<section class="step" id="s2">
+  <div class="n">2</div>
+  <div class="text"><h2 data-i18n="s2t"></h2><div class="grid" data-form="turbine"></div></div>
+  <div class="side"><p data-i18n="s2p"></p><table class="spec" id="geo-spec"></table></div>
+</section>
+
+<section class="step" id="s3">
+  <div class="n">3</div>
+  <div class="text"><h2 data-i18n="s3t"></h2><div class="grid" data-form="print"></div></div>
+  <div class="side"><p data-i18n="s3p"></p><table class="spec" id="print-spec"></table></div>
+</section>
+
+<section class="step wide" id="s4">
+  <div class="n">4</div>
+  <div class="text"><h2 data-i18n="s4t"></h2><p class="note" data-i18n="s4p"></p></div>
+  <div class="side">
+    <div class="kpis" id="kpis"></div>
+    <div class="cols">
+      <div><svg class="chart" id="chart" viewBox="0 0 640 300" role="img"></svg><p class="note" data-i18n="chartcap"></p></div>
+      <div><table class="spec" id="res-spec"></table></div>
+    </div>
+    <ul class="notes" id="warnings"></ul>
+  </div>
+</section>
+
+<section class="step wide" id="s5">
+  <div class="n">5</div>
+  <div class="text"><h2 data-i18n="s5t"></h2><p class="note" data-i18n="s5p"></p></div>
+  <div class="side">
+    <div class="viewer"><canvas id="view" width="1200" height="520"></canvas><span class="cap" data-i18n="viewcap"></span></div>
+    <div class="row">
+      <button class="btn" type="button" id="dl-rotor" data-i18n="dlrotor"></button>
+      <button class="btn secondary" type="button" id="dl-nose" data-i18n="dlnose"></button>
+      <span class="note" id="build-info"></span>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <span data-i18n="foot1"></span>
+  <span>KATAK · MIT · <a href="https://github.com/MikalaiKryvusha/KATAK">github.com/MikalaiKryvusha/KATAK</a></span>
+</footer>
+</div>
 <script type="module">
 // ===== CORE-BEGIN (pure functions, no DOM; tested by kalculator/test.mjs) =====
 // The KATAK core: geometry of the printable turbine and the binary STL. Units: millimetres in geometry (the STL boundary),
@@ -372,6 +528,118 @@ const KATAK = (() => {
     return { params: p, wall: wf, dims: d, checks: checks(p, d, wall), nose: noseInfo && { length_mm: noseInfo.length_mm, base_mm: noseInfo.base_mm }, parts, lift_mm: -lo[2] };
   }
 
+  // ---------------------------------------------------------------- physics (researches/01 §2–§5, SI units)
+  // Every constant names its section; [ОЦЕНКА] there = an engineering estimate of the recon, shown to the user as such.
+  const RD = 287.05;                                        // J/(kg·K), §3.1
+  const NU_AIR = 1.5e-5;                                    // m²/s, §2.4 (Re_D)
+  const CP_PRESETS = {                                      // §2.4 «Наборы параметров»
+    realistic: { cp: 0.22, lam: 1.8 }, optimistic: { cp: 0.29, lam: 2.1 }, pessimistic: { cp: 0.12, lam: 1.2 },
+  };
+  const TERRAIN = {                                         // §3.2, z0 (m) per WMO class
+    sea: 0.0002, snow: 0.005, open: 0.03, crops: 0.10, scattered: 0.25, park: 0.5, suburb: 1.0, city: 2.0,
+  };
+  const SITE = { field: 1.0, rural: 0.85, roof_high: 0.6, roof: 0.3, yard: 0.1 };   // §3.5 f_site [ОЦЕНКА]
+  const MATERIALS = {                                       // §5.6: ρ g/cm³, σ_Z MPa (across layers — the weak one), HDT °C, outdoor
+    ASA: { rho: 1.05, sz: 35, hdt: 100, outdoor: true }, PETG: { rho: 1.25, sz: 39, hdt: 69, outdoor: true },
+    ABS: { rho: 1.05, sz: 32, hdt: 87, outdoor: false }, PLA: { rho: 1.24, sz: 35, hdt: 57, outdoor: false },
+    PACF: { rho: 1.06, sz: 64, hdt: 194, outdoor: true },
+  };
+  const BEARINGS = [                                        // deep-groove ball bearings: bore, OD, width (mm) — catalogue sizes
+    { id: '608', d: 8, D: 22, B: 7 }, { id: '6000', d: 10, D: 26, B: 8 }, { id: '6001', d: 12, D: 28, B: 8 },
+    { id: '6002', d: 15, D: 32, B: 9 }, { id: '6003', d: 17, D: 35, B: 10 }, { id: '6004', d: 20, D: 42, B: 12 },
+    { id: '6005', d: 25, D: 47, B: 12 },
+  ];
+  // Γ(x), Lanczos approximation (g = 7) — for the Weibull scale c = V̄/Γ(1 + 1/k), §3.3
+  function gamma(x) {
+    const g = 7, C = [0.99999999999980993, 676.5203681218851, -1259.1392167224028, 771.32342877765313, -176.61502916214059,
+      12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7];
+    if (x < 0.5) return Math.PI / (Math.sin(Math.PI * x) * gamma(1 - x));
+    x -= 1; let a = C[0]; const t = x + g + 0.5;
+    for (let i = 1; i < 9; i++) a += C[i] / (x + i);
+    return Math.sqrt(2 * Math.PI) * Math.pow(t, x + 0.5) * Math.exp(-t) * a;
+  }
+  // ISA density with the user's temperature, §3.1: p(h) = 101325·(1 − 0.0065h/288.15)^5.25588, ρ = p/(R_d·T)
+  const density = (alt_m, t_c) => 101325 * Math.pow(1 - 0.0065 * alt_m / 288.15, 5.25588) / (RD * (t_c + 273.15));
+  // log wind profile, §3.2 (displacement d = 0 for a free mast)
+  const windAt = (vRef, zRef, z, z0) => vRef * Math.log(Math.max(z, z0 * 1.01) / z0) / Math.log(zRef / z0);
+  const weibullC = (vMean, k) => vMean / gamma(1 + 1 / k);
+  const weibullPdf = (v, c, k) => (v <= 0 ? 0 : (k / c) * Math.pow(v / c, k - 1) * Math.exp(-Math.pow(v / c, k)));
+  const interp = (x, x0, x1, y0, y1) => y0 + (y1 - y0) * Math.max(0, Math.min(1, (x - x0) / (x1 - x0)));
+
+  // Cp_max and λ_opt of THIS geometry: the preset times the multipliers of §2.4 (exit angle, variable profile, blade count,
+  // thickness, Reynolds number, tower). Returns the parts so the page can show where a number came from.
+  function rotorModel(p, wall_mm, vHubMean) {
+    const pre = CP_PRESETS[p.cp_preset] || CP_PRESETS.realistic;
+    const aExit = p.angle_mode === 'variable' ? p.a3_deg : p.alpha_deg;
+    const fA = Math.max(0.5, 1 - 0.29 * Math.pow((aExit - 60) / 30, 2));
+    const fVar = p.angle_mode === 'variable' ? 1.10 : 1.0;
+    const fN = { 2: 0.97, 3: 1.0, 4: 0.94, 5: 0.85 }[p.blades] ?? 0.85;
+    const tD = wall_mm / p.diameter_mm;
+    const fT = tD <= 0.015 ? 1 : Math.max(0.5, 1 - 3 * (tD - 0.015));
+    const re = Math.max(vHubMean, 1) * (p.diameter_mm / 1000) / NU_AIR;
+    const fRe = re >= 5e5 ? 1 : re <= 5e4 ? 0.6 : 0.6 + 0.4 * Math.log10(re / 5e4);
+    const fTower = 0.976;
+    const cpMax = pre.cp * fA * fVar * fN * fT * fRe * fTower;
+    const lamOpt = pre.lam * Math.pow(aExit / 60, 0.7) * (p.blades === 2 ? 1.25 : 1);
+    return { cpMax, lamOpt, lamRun: 2 * lamOpt, cq0: 2 * cpMax / lamOpt, re, f: { fA, fVar, fN, fT, fRe, fTower }, preset: pre };
+  }
+  const cpAt = (m, lam) => { const x = lam / m.lamOpt; return x <= 0 || x >= 2 ? 0 : m.cpMax * x * (2 - x); };   // §2.4
+  const ctAt = (lam) => Math.min(1, Math.max(0.35, 1 - 0.15 * lam));                                          // §2.5
+
+  // The whole calculation: site → wind at the hub → rotor model → power curve → AEP → rpm, torque → loads → shaft, bearing,
+  // stresses, mass. `geo` = the resolved geometry parameters (wall, L/D, hub) from resolve().
+  function physics(s, geo) {
+    const p = geo.p, wall = geo.wf.wall_mm;
+    const D = p.diameter_mm / 1000, R = D / 2, A = Math.PI * R * R;
+    const rho = density(s.alt_m, s.temp_c);
+    const z0 = TERRAIN[s.terrain] ?? 0.03;
+    const vHub = windAt(s.v_ref, s.z_ref, s.height_m, z0);
+    const k = s.weibull_k, c = weibullC(vHub, k);
+    const m = rotorModel({ ...p, cp_preset: s.cp_preset }, wall, vHub);   // the Cp preset is the user's site-level choice
+    const vIn = s.v_in, vRated = s.v_rated, vOut = s.v_out, idle = s.p_idle;
+    const nOf = (v) => 60 * m.lamOpt * v / (Math.PI * D);                // rpm, §4.1
+    const nRated = nOf(vRated);
+    const eta = (v) => interp(nOf(v) / nRated, 0.15, 1.0, 0.34, 0.80);   // §4.5 η_chain(n/n_rated)
+    const pAero = (v) => (v < vIn || v >= vOut ? 0 : Math.min(0.5 * rho * A * Math.pow(Math.min(v, vRated), 3) * cpAt(m, m.lamOpt), Infinity));
+    const pEl = (v) => Math.max(0, eta(Math.min(v, vRated)) * pAero(v) - (pAero(v) > 0 ? idle : 0));
+    const curve = [];
+    for (let v = 0; v <= 25 + 1e-9; v += 0.5) curve.push({ v, pa: pAero(v), pe: pEl(v), f: weibullPdf(v, c, k) });
+    let e = 0, dv = 0.1;
+    for (let v = dv / 2; v < 40; v += dv) e += pEl(v) * weibullPdf(v, c, k) * dv;
+    const fSite = SITE[s.site] ?? 1;
+    const meanW = e * fSite, aep = meanW * 8760 / 1000;
+    let wind = 0; for (let v = dv / 2; v < 40; v += dv) wind += 0.5 * rho * A * v * v * v * weibullPdf(v, c, k) * dv;
+    const pRatedEl = pEl(vRated);
+    // torque, §4.2: Q = Cq·½ρAv²R; starting torque at the cut-in speed
+    const q = (v, lam) => (cpAt(m, lam) / Math.max(lam, 1e-6)) * 0.5 * rho * A * v * v * R;
+    const q0 = m.cq0 * 0.5 * rho * A * vIn * vIn * R;
+    // loads, §5.1: parking at Ve50 (Cd = 1.5 on A) governs; operation at the brake speed with Ct_design = 1.0
+    const fPark = 0.5 * rho * s.ve50 * s.ve50 * 1.5 * A, fOp = 1.0 * 0.5 * rho * A * vOut * vOut;
+    // shaft, §5.3: steel S_y 250 MPa, n = 3.3 (IEC γf·γm); M at the rear bearing with the overhang to the rotor's middle
+    const Ls = p.ld * D, a = Ls / 2 + p.hub_back_mm / 1000;
+    const M = fPark * a, T = q(vOut, m.lamOpt);
+    const dShaft = Math.cbrt(32 * 3.3 / (Math.PI * 250e6) * Math.sqrt(M * M + 0.75 * T * T)) * 1000;
+    const bearing = BEARINGS.find((b) => b.d >= dShaft) || BEARINGS[BEARINGS.length - 1];
+    // centrifugal stress, §5.2: thin ring at the tip σ = ρ_m·v_tip², at the runaway speed λ_run·V_out
+    const mat = MATERIALS[s.material] || MATERIALS.ASA;
+    const vTipRun = m.lamRun * vOut, sigmaRing = mat.rho * 1000 * vTipRun * vTipRun / 1e6;
+    return {
+      rho, z0, vHub, k, c, model: m, curve, meanW, aep, windMeanW: wind, cf: pRatedEl > 0 ? meanW / pRatedEl : 0, fSite,
+      pRatedEl, rpm: { mean: nOf(vHub), rated: nRated, run: 60 * m.lamRun * vOut / (Math.PI * D) },
+      torque: { rated: q(vRated, m.lamOpt), start: q0 },
+      loads: { park: fPark, op: fOp, moment: M, overhang_m: a },
+      shaft: { d_mm: dShaft, bearing }, stress: { vTipRun, sigmaRing, allow: mat.sz / 3.3, ok: sigmaRing <= mat.sz / 3.3 },
+      material: mat,
+    };
+  }
+  // Size the rotor for a wished electrical power at a wind speed (the «by power» mode): P = η·½ρ(πD²/4)v³·Cp → D.
+  function diameterForPower(pW, v, s) {
+    const rho = density(s.alt_m, s.temp_c), cp = (CP_PRESETS[s.cp_preset] || CP_PRESETS.realistic).cp * 1.10 * 0.976, eta = 0.6;
+    return Math.sqrt(8 * pW / (eta * rho * Math.PI * v * v * v * cp)) * 1000;
+  }
+  const SITE_DEFAULTS = { v_ref: 4.5, z_ref: 10, height_m: 6, terrain: 'crops', alt_m: 200, temp_c: 10, weibull_k: 2,
+    site: 'rural', v_in: 3, v_rated: 12.5, v_out: 14, p_idle: 0.2, ve50: 42, material: 'ASA', cp_preset: 'realistic' };
+
   // ---------------------------------------------------------------- binary STL (researches/03 §2)
   // 80-byte header (must not start with "solid"), uint32 count, 50 bytes per triangle, little-endian. [NOT-TESTED]
   function toSTL(m, name = 'KATAK') {
@@ -388,23 +656,449 @@ const KATAK = (() => {
     return new Uint8Array(buf);
   }
 
-  return { DEFAULTS, DETAIL, build, resolve, alphaAt, wallForNozzle, toSTL, checkClosed, signedVolume, bounds,
+  return { DEFAULTS, DETAIL, SITE_DEFAULTS, CP_PRESETS, TERRAIN, SITE, MATERIALS, BEARINGS, build, resolve, alphaAt, wallForNozzle,
+    physics, diameterForPower, density, windAt, gamma, weibullC, toSTL, checkClosed, signedVolume, bounds,
     _: { gridSolid, prism, revolve, sweepTube, profileRadius, mesh, append } };
 })();
 // ===== CORE-END =====
+// =====================================================================================================================
+// The page: a form built from one schema, the RU/EN dictionary, the calculation on every change, the WebGL preview and the
+// STL downloads. Nothing here computes physics or geometry — it calls KATAK. [NOT-TESTED]
+// =====================================================================================================================
+const $ = (s) => document.querySelector(s);
 
-// ---- page (phase A placeholder) — a download of the default rotor
-const out = document.getElementById('out');
-document.getElementById('dl').addEventListener('click', () => {
+// ---- the fields: [id, form, type, default, {min, max, step, unit, opts}]; labels and hints come from the dictionary
+const FIELDS = [
+  ['v_ref', 'site', 'num', 4.5, { min: 1, max: 15, step: 0.1, unit: 'm/s' }],
+  ['z_ref', 'site', 'num', 10, { min: 1, max: 100, step: 1, unit: 'm' }],
+  ['height_m', 'site', 'num', 6, { min: 1, max: 60, step: 0.5, unit: 'm' }],
+  ['terrain', 'site', 'sel', 'crops', { opts: ['sea', 'snow', 'open', 'crops', 'scattered', 'park', 'suburb', 'city'] }],
+  ['site', 'site', 'sel', 'rural', { opts: ['field', 'rural', 'roof_high', 'roof', 'yard'] }],
+  ['alt_m', 'site', 'num', 200, { min: 0, max: 4000, step: 10, unit: 'm' }],
+  ['temp_c', 'site', 'num', 10, { min: -30, max: 45, step: 1, unit: '°C' }],
+  ['weibull_k', 'site', 'num', 2, { min: 1.2, max: 3.5, step: 0.1 }],
+  ['mode', 'turbine', 'sel', 'diameter', { opts: ['diameter', 'power'] }],
+  ['diameter_mm', 'turbine', 'num', 200, { min: 100, max: 1500, step: 10, unit: 'mm' }],
+  ['target_w', 'turbine', 'num', 5, { min: 0.5, max: 500, step: 0.5, unit: 'W' }],
+  ['target_v', 'turbine', 'num', 6, { min: 3, max: 14, step: 0.5, unit: 'm/s' }],
+  ['blades', 'turbine', 'sel', '3', { opts: ['2', '3', '4'] }],
+  ['turns', 'turbine', 'num', 1.0, { min: 0.8, max: 1.25, step: 0.05 }],
+  ['angle_mode', 'turbine', 'sel', 'variable', { opts: ['variable', 'fixed'] }],
+  ['alpha_deg', 'turbine', 'num', 60, { min: 45, max: 75, step: 1, unit: '°' }],
+  ['ld', 'turbine', 'auto', '', { min: 0.6, max: 1.2, step: 0.01 }],
+  ['hub_ratio', 'turbine', 'num', 0.10, { min: 0.07, max: 0.15, step: 0.01 }],
+  ['hand', 'turbine', 'sel', '1', { opts: ['1', '-1'] }],
+  ['cp_preset', 'turbine', 'sel', 'realistic', { opts: ['realistic', 'optimistic', 'pessimistic'] }],
+  ['nozzle_mm', 'print', 'sel', '0.4', { opts: ['0.2', '0.25', '0.3', '0.4', '0.5', '0.6', '0.8', '1.0'] }],
+  ['layer_mm', 'print', 'auto', '', { min: 0.05, max: 0.8, step: 0.02, unit: 'mm' }],
+  ['wall_mm', 'print', 'auto', '', { min: 0.4, max: 10, step: 0.1, unit: 'mm' }],
+  ['material', 'print', 'sel', 'ASA', { opts: ['ASA', 'PETG', 'PACF', 'ABS', 'PLA'] }],
+  ['bed_mm', 'print', 'num', 220, { min: 100, max: 1000, step: 1, unit: 'mm' }],
+  ['detail', 'print', 'sel', 'medium', { opts: ['low', 'medium', 'high', 'ultra'] }],
+  ['bore', 'print', 'sel', 'bearings', { opts: ['bearings', 'profile', 'solid'] }],
+  ['bearing', 'print', 'sel', 'auto', { opts: ['auto', '608', '6000', '6001', '6002', '6003', '6004', '6005'] }],
+  ['bore_kind', 'print', 'sel', 'round', { opts: ['round', 'hex', 'd', 'square'] }],
+  ['bore_mm', 'print', 'auto', '', { min: 3, max: 40, step: 0.5, unit: 'mm' }],
+  ['ties', 'print', 'num', 3, { min: 0, max: 6, step: 1 }],
+  ['tie_mm', 'print', 'num', 4, { min: 2, max: 12, step: 0.5, unit: 'mm' }],
+  ['rim', 'print', 'sel', 'auto', { opts: ['auto', 'yes', 'no'] }],
+  ['nose', 'print', 'sel', 'yes', { opts: ['yes', 'no'] }],
+  ['nose_shape', 'print', 'sel', 'ellipse', { opts: ['ellipse', 'ogive', 'cone'] }],
+  ['nose_ratio', 'print', 'num', 0.8, { min: 0.6, max: 1.0, step: 0.05 }],
+];
+
+// ---- the dictionary: one block per language (researches/03 §4); a new language is one more block
+const I18N = {
+  ru: {
+    title: 'Калькулятор спиральной ветротурбины Архимеда',
+    lede: 'Опишите место и свой 3D-принтер — страница рассчитает спиральную турбину Архимеда KATAK: какую мощность и сколько энергии за год она даст, как быстро вращается, какой нужен вал и подшипник — и сгенерирует STL ротора и носа, подогнанный под ваше сопло.',
+    f1t: 'Чего ждать', f1: 'Печатная турбина 0,2–0,6 м — это единицы ватт: датчик, подсветка, учебный стенд. Домашнюю электростанцию она не заменит.',
+    f2t: 'На чём стоят числа', f2: 'Формулы и коэффициенты — из рецензируемых исследований спиральных турбин, а не из рекламы производителя. Источники — в папке researches/ проекта.',
+    f3t: 'Ваши данные', f3: 'Всё считается прямо в этом браузере: страница работает без интернета и ничего никуда не отправляет.',
+    n1: 'Место', n2: 'Турбина', n3: 'Печать', n4: 'Результат', n5: '3D и STL',
+    s1t: 'Где будет стоять турбина', s1p: 'Ветер у земли слабее, чем на метеостанции. Страница пересчитывает его на высоту турбины по типу местности.',
+    s2t: 'Какую турбину вы хотите', s2p: 'Задайте диаметр — или желаемую мощность, и страница подберёт диаметр сама. Остальное заполнено рекомендациями исследований; меняйте, если знаете зачем.',
+    s3t: 'Чем и на чём печатаете', s3p: 'Толщина лопасти подгоняется под целое число линий вашего сопла. Пустое поле — значение посчитает страница.',
+    s4t: 'Что получится', s4p: 'Числа — оценка по модели исследований; реальная турбина на крыше обычно даёт меньше.',
+    s5t: 'Модель и файлы для печати', s5p: 'Печатайте ротор осью вертикально, носом вниз. Нос — отдельная деталь, вершиной вверх.',
+    chartcap: 'Линия — электрическая мощность по скорости ветра; столбики — как часто дует такой ветер на вашем месте.',
+    viewcap: 'Тяните мышью — вращение, колесо — масштаб',
+    dlrotor: 'Скачать STL ротора', dlnose: 'Скачать STL носа',
+    foot1: 'KATAK — Krinik Archimedes Turbine Automated Kalculator. Модель: Cp(λ) по исследованиям спиральных турбин, нагрузки по IEC 61400-2.',
+    auto: 'авто',
+    f: {
+      v_ref: 'Средний ветер', z_ref: 'На высоте измерения', height_m: 'Высота турбины', terrain: 'Местность', site: 'Где стоит', alt_m: 'Высота над морем',
+      temp_c: 'Средняя температура', weibull_k: 'Форма распределения k', mode: 'Как задать размер', diameter_mm: 'Диаметр ротора',
+      target_w: 'Желаемая мощность', target_v: 'при ветре', blades: 'Лопастей', turns: 'Оборотов спирали', angle_mode: 'Профиль угла раскрытия',
+      alpha_deg: 'Угол раскрытия', ld: 'Длина / диаметр', hub_ratio: 'Ступица / диаметр', hand: 'Закрутка', cp_preset: 'Оценка КПД ротора',
+      nozzle_mm: 'Сопло', layer_mm: 'Высота слоя', wall_mm: 'Толщина лопасти', material: 'Пластик', bed_mm: 'Стол принтера', detail: 'Детализация модели',
+      bore: 'Ось', bearing: 'Подшипник', bore_kind: 'Профиль отверстия / оси', bore_mm: 'Диаметр отверстия / оси', ties: 'Стяжек между витками',
+      tie_mm: 'Диаметр стяжки', rim: 'Обод на выходе', nose: 'Нос', nose_shape: 'Форма носа', nose_ratio: 'Длина носа / диаметр',
+    },
+    h: {
+      v_ref: 'среднегодовой, с метеостанции или карты ветров', z_ref: 'у метеостанций обычно 10 м', terrain: 'шероховатость земли вокруг',
+      site: 'на крышах ветер рваный — выработка ниже', weibull_k: '2 — типичное распределение (Рэлей)', ld: 'пусто — по правилу зазора между лопастями',
+      cp_preset: 'реалистичная — медиана измерений', wall_mm: 'пусто — 0,8 % диаметра, не меньше 3 линий', layer_mm: 'пусто — половина сопла',
+      bearing: 'авто — по расчётному диаметру стального вала', bore_mm: 'пусто — под вал подшипника', bed_mm: 'наибольшая сторона по X/Y/Z',
+      ties: 'вертикальные стойки — печатаются без поддержек', rim: 'авто — с 400 мм',
+    },
+    o: {
+      sea: 'море', snow: 'снег, лёд, отмели', open: 'ровное поле, трава', crops: 'посевы, редкие препятствия', scattered: 'высокие посевы, деревья',
+      park: 'парк, кусты', suburb: 'пригород, лес', city: 'центр города',
+      field: 'открытое поле, мачта', rural: 'село, препятствия ниже турбины', roof_high: 'крыша, высоко над коньком', roof: 'обычная крыша', yard: 'двор, балкон',
+      diameter: 'по диаметру', power: 'по мощности', variable: 'переменный 30-45-60°', fixed: 'постоянный угол', '1': 'правая', '-1': 'левая',
+      realistic: 'реалистичная', optimistic: 'оптимистичная', pessimistic: 'пессимистичная',
+      low: 'низкая', medium: 'средняя', high: 'высокая', ultra: 'сверхвысокая',
+      bearings: 'металлический вал на подшипниках', profile: 'отверстие с профилем', solid: 'печатная ось',
+      ellipse: 'эллипсоид', ogive: 'оживало', cone: 'конус',
+      auto: 'авто', round: 'круг', hex: 'шестигранник', d: 'D-срез', square: 'квадрат', yes: 'да', no: 'нет',
+      ASA: 'ASA — для улицы', PETG: 'PETG — тень', PACF: 'PA-CF — прочный', ABS: 'ABS', PLA: 'PLA — только в помещении',
+    },
+    k: {
+      meanW: 'средняя мощность', aep: 'энергии за год', vHub: 'ветер на высоте турбины', rpm: 'оборотов при среднем ветре',
+      cp: 'КПД ротора Cp', lam: 'быстроходность λ', start: 'стартовый момент при 3 м/с', park: 'нагрузка на стоянке в бурю',
+    },
+    r: {
+      wall: 'Толщина лопасти', layer: 'Слой / ширина линии', ld: 'Длина / диаметр', len: 'Длина ротора', hub: 'Ступица', gap: 'Зазор между витками у носа',
+      size: 'Габарит печати', mass: 'Пластик (ротор + нос)', shaft: 'Стальной вал не тоньше', bearing: 'Подшипник', rpmRated: 'Обороты при 12,5 м/с',
+      run: 'Обороты разноса без нагрузки', stress: 'Напряжение на кромке при разносе', rho: 'Плотность воздуха', weibull: 'Вейбулл c / k',
+      wind: 'Энергия ветра через ротор', rated: 'Мощность при 12,5 м/с', cf: 'Коэффициент использования', nose: 'Нос',
+      lines: ['линия', 'линии', 'линий'],
+    },
+    w: {
+      ok: 'Геометрия проходит проверки: корень лопасти за носом, витки не касаются.',
+      'root-not-rising': 'Корень лопасти идёт вспять — увеличьте длину / диаметр.', 'root-before-nose': 'Корень лопасти выходит перед носом — увеличьте длину / диаметр.',
+      'blades-too-close': 'Витки у носа слишком близко — увеличьте длину / диаметр или уменьшите стенку.',
+      bed: 'Модель больше стола принтера — печатайте по частям или уменьшите диаметр.', overhang: 'Нависание у выхода {a}° — больше 55°: нужны древовидные поддержки.',
+      material: 'Этот пластик не для улицы (солнце, УФ) — для турбины на открытом воздухе берите ASA.', stress: 'При разносе напряжение на кромке выше допустимого — нужен электрический тормоз.',
+      thick: 'Стенка толще 1,5 % диаметра — ротор теряет КПД.', big: 'Ротор больше 1 м печатают только как прототип; серийные — из стеклопластика.',
+      roof: 'На крыше выработка обычно в 3 раза ниже, чем на мачте в поле, — это уже учтено.', power: 'Для {w} Вт при {v} м/с нужен ротор ≈ {d} мм.',
+      shear: 'Ветер на высоте турбины {v} м/с против {r} м/с на высоте измерения.',
+    },
+    u: { 'm/s': 'м/с', m: 'м', mm: 'мм', W: 'Вт', '°C': '°C', '°': '°', rpm: 'об/мин', N: 'Н', g: 'г', kWh: 'кВт·ч', mNm: 'мН·м', MPa: 'МПа', 'kg/m³': 'кг/м³', Wm: 'Вт' },
+  },
+  en: {
+    title: 'Archimedes spiral wind turbine calculator',
+    lede: 'Describe your site and your 3D printer — the page sizes a KATAK Archimedes spiral turbine: how much power and energy per year it gives, how fast it spins, which shaft and bearing it needs — and generates the STL of the rotor and the nose, fitted to your nozzle.',
+    f1t: 'What to expect', f1: 'A printed turbine of 0.2–0.6 m gives single watts: a sensor, a light, a classroom rig. It does not replace a home power plant.',
+    f2t: 'Where the numbers come from', f2: 'Formulas and coefficients come from peer-reviewed studies of spiral turbines, not from the manufacturer\'s brochure. Sources are in the project\'s researches/ folder.',
+    f3t: 'Your data', f3: 'Everything is computed in this browser: the page works offline and sends nothing anywhere.',
+    n1: 'Site', n2: 'Turbine', n3: 'Printing', n4: 'Result', n5: '3D and STL',
+    s1t: 'Where the turbine will stand', s1p: 'Wind near the ground is weaker than at a weather station. The page brings it to the turbine height by the terrain type.',
+    s2t: 'Which turbine you want', s2p: 'Set the diameter — or the power you want, and the page picks the diameter. The rest holds the recommendations of the studies; change them if you know why.',
+    s3t: 'What you print with', s3p: 'The blade thickness is fitted to a whole number of your nozzle\'s lines. An empty field is computed by the page.',
+    s4t: 'What you get', s4p: 'The numbers are a model estimate from the studies; a real turbine on a roof usually gives less.',
+    s5t: 'Model and print files', s5p: 'Print the rotor with its axis vertical, nose down. The nose is a separate part, tip up.',
+    chartcap: 'Line — electrical power by wind speed; bars — how often such wind blows at your site.',
+    viewcap: 'Drag to rotate, wheel to zoom',
+    dlrotor: 'Download rotor STL', dlnose: 'Download nose STL',
+    foot1: 'KATAK — Krinik Archimedes Turbine Automated Kalculator. Model: Cp(λ) from spiral turbine studies, loads after IEC 61400-2.',
+    auto: 'auto',
+    f: {
+      v_ref: 'Mean wind', z_ref: 'Measured at height', height_m: 'Turbine height', terrain: 'Terrain', site: 'Placement', alt_m: 'Altitude',
+      temp_c: 'Mean temperature', weibull_k: 'Distribution shape k', mode: 'Size by', diameter_mm: 'Rotor diameter',
+      target_w: 'Wanted power', target_v: 'at wind', blades: 'Blades', turns: 'Spiral turns', angle_mode: 'Opening angle profile',
+      alpha_deg: 'Opening angle', ld: 'Length / diameter', hub_ratio: 'Hub / diameter', hand: 'Winding', cp_preset: 'Rotor efficiency estimate',
+      nozzle_mm: 'Nozzle', layer_mm: 'Layer height', wall_mm: 'Blade thickness', material: 'Plastic', bed_mm: 'Printer bed', detail: 'Model detail',
+      bore: 'Axle', bearing: 'Bearing', bore_kind: 'Hole / axle profile', bore_mm: 'Hole / axle diameter', ties: 'Ties between turns',
+      tie_mm: 'Tie diameter', rim: 'Exit rim', nose: 'Nose', nose_shape: 'Nose shape', nose_ratio: 'Nose length / diameter',
+    },
+    h: {
+      v_ref: 'annual mean, from a weather station or a wind map', z_ref: 'weather stations usually measure at 10 m', terrain: 'ground roughness around',
+      site: 'wind is gusty on roofs — less energy', weibull_k: '2 is the typical distribution (Rayleigh)', ld: 'empty — by the blade-gap rule',
+      cp_preset: 'realistic — the median of measurements', wall_mm: 'empty — 0.8 % of the diameter, at least 3 lines', layer_mm: 'empty — half the nozzle',
+      bearing: 'auto — by the computed steel shaft diameter', bore_mm: 'empty — fits the bearing\'s shaft', bed_mm: 'the largest side X/Y/Z',
+      ties: 'vertical posts — print without supports', rim: 'auto — from 400 mm',
+    },
+    o: {
+      sea: 'sea', snow: 'snow, ice, mud flats', open: 'flat field, grass', crops: 'crops, few obstacles', scattered: 'tall crops, trees',
+      park: 'park, bushes', suburb: 'suburb, forest', city: 'city centre',
+      field: 'open field, mast', rural: 'village, obstacles below the turbine', roof_high: 'roof, high above the ridge', roof: 'typical roof', yard: 'yard, balcony',
+      diameter: 'diameter', power: 'power', variable: 'variable 30-45-60°', fixed: 'fixed angle', '1': 'right', '-1': 'left',
+      realistic: 'realistic', optimistic: 'optimistic', pessimistic: 'pessimistic',
+      low: 'low', medium: 'medium', high: 'high', ultra: 'ultra',
+      bearings: 'steel shaft on bearings', profile: 'profiled hole', solid: 'printed axle',
+      ellipse: 'ellipsoid', ogive: 'ogive', cone: 'cone',
+      auto: 'auto', round: 'round', hex: 'hexagon', d: 'D-cut', square: 'square', yes: 'yes', no: 'no',
+      ASA: 'ASA — outdoors', PETG: 'PETG — shade', PACF: 'PA-CF — strong', ABS: 'ABS', PLA: 'PLA — indoors only',
+    },
+    k: {
+      meanW: 'mean power', aep: 'energy per year', vHub: 'wind at the turbine', rpm: 'rpm at mean wind',
+      cp: 'rotor efficiency Cp', lam: 'tip speed ratio λ', start: 'starting torque at 3 m/s', park: 'storm load when parked',
+    },
+    r: {
+      wall: 'Blade thickness', layer: 'Layer / line width', ld: 'Length / diameter', len: 'Rotor length', hub: 'Hub', gap: 'Gap between turns at the nose',
+      size: 'Print size', mass: 'Plastic (rotor + nose)', shaft: 'Steel shaft at least', bearing: 'Bearing', rpmRated: 'rpm at 12.5 m/s',
+      run: 'Runaway rpm without load', stress: 'Tip stress at runaway', rho: 'Air density', weibull: 'Weibull c / k',
+      wind: 'Wind energy through the rotor', rated: 'Power at 12.5 m/s', cf: 'Capacity factor', nose: 'Nose',
+      lines: ['line', 'lines', 'lines'],
+    },
+    w: {
+      ok: 'The geometry passes the checks: the blade root stays behind the nose, the turns do not touch.',
+      'root-not-rising': 'The blade root runs backwards — increase length / diameter.', 'root-before-nose': 'The blade root starts before the nose — increase length / diameter.',
+      'blades-too-close': 'The turns are too close at the nose — increase length / diameter or reduce the wall.',
+      bed: 'The model is larger than the printer bed — print in parts or reduce the diameter.', overhang: 'Overhang at the exit {a}° — over 55°: tree supports needed.',
+      material: 'This plastic is not for outdoors (sun, UV) — use ASA for a turbine in the open.', stress: 'At runaway the tip stress exceeds the allowed — an electric brake is needed.',
+      thick: 'The wall is thicker than 1.5 % of the diameter — the rotor loses efficiency.', big: 'Rotors over 1 m are printed only as prototypes; production ones are fibreglass.',
+      roof: 'On a roof the energy is usually 3× lower than on a mast in a field — already accounted for.', power: 'For {w} W at {v} m/s the rotor needs ≈ {d} mm.',
+      shear: 'Wind at the turbine height {v} m/s vs {r} m/s at the measuring height.',
+    },
+    u: { 'm/s': 'm/s', m: 'm', mm: 'mm', W: 'W', '°C': '°C', '°': '°', rpm: 'rpm', N: 'N', g: 'g', kWh: 'kWh', mNm: 'mN·m', MPa: 'MPa', 'kg/m³': 'kg/m³', Wm: 'W' },
+  },
+};
+let lang = 'ru';
+try { lang = localStorage.getItem('katak-lang') || (navigator.language || '').slice(0, 2); } catch { lang = (navigator.language || '').slice(0, 2); }
+if (!I18N[lang]) lang = 'en';
+const T = () => I18N[lang];
+const fmt = (x, d = 0) => new Intl.NumberFormat(lang, { maximumFractionDigits: d, minimumFractionDigits: d }).format(x);
+const unit = (u) => T().u[u] ?? u;
+// plural forms: ru — 1 линия · 2–4 линии · 5+ линий (Intl.PluralRules one / few / many); en — 1 line · lines
+const plural = (n, forms) => { const r = new Intl.PluralRules(lang).select(n); return forms[r === 'one' ? 0 : r === 'few' ? 1 : lang === 'ru' ? 2 : 1]; };
+
+// ---- the form, built from FIELDS
+function buildForms() {
+  for (const box of document.querySelectorAll('[data-form]')) box.innerHTML = '';
+  for (const [id, form, type, def, o] of FIELDS) {
+    const box = document.querySelector(`[data-form="${form}"]`);
+    const wrap = document.createElement('div');
+    wrap.className = 'field' + (type === 'auto' ? ' auto' : ''); wrap.dataset.id = id;
+    const lab = document.createElement('label'); lab.htmlFor = 'in-' + id;
+    lab.innerHTML = `${T().f[id] ?? id}${o.unit ? ` <span class="unit">${unit(o.unit)}</span>` : ''}`;
+    let input;
+    if (type === 'sel') {
+      input = document.createElement('select');
+      for (const v of o.opts) { const op = document.createElement('option'); op.value = v; op.textContent = T().o[v] ?? v; input.append(op); }
+    } else {
+      input = document.createElement('input'); input.type = 'number'; input.min = o.min; input.max = o.max; input.step = o.step;
+      if (type === 'auto') input.placeholder = T().auto;
+    }
+    input.id = 'in-' + id;
+    input.value = state[id] ?? def;
+    input.addEventListener('input', () => { state[id] = input.value; schedule(); });
+    wrap.append(lab, input);
+    if (T().h[id]) { const h = document.createElement('span'); h.className = 'hint'; h.textContent = T().h[id]; wrap.append(h); }
+    box.append(wrap);
+  }
+}
+const state = {};
+const num = (id) => { const v = state[id] ?? FIELDS.find((f) => f[0] === id)[3]; return v === '' || v == null ? null : Number(v); };
+const str = (id) => String(state[id] ?? FIELDS.find((f) => f[0] === id)[3]);
+
+function applyI18n() {
+  document.documentElement.lang = lang;
+  for (const el of document.querySelectorAll('[data-i18n]')) { const v = T()[el.dataset.i18n]; if (typeof v === 'string') el.textContent = v; }
+  document.title = 'KATAK — ' + T().title;
+  buildForms();
+  showModeFields();
+}
+function showModeFields() {
+  const vis = (id, on) => { const el = document.querySelector(`.field[data-id="${id}"]`); if (el) el.hidden = !on; };
+  const byPower = str('mode') === 'power';
+  vis('diameter_mm', !byPower); vis('target_w', byPower); vis('target_v', byPower);
+  vis('alpha_deg', str('angle_mode') === 'fixed');
+  const b = str('bore'); vis('bearing', b === 'bearings'); vis('bore_kind', b !== 'bearings');
+  const nose = str('nose') === 'yes'; vis('nose_shape', nose); vis('nose_ratio', nose);
+}
+
+// ---- the calculation
+let last = null;
+function compute() {
+  const s = { ...KATAK.SITE_DEFAULTS };
+  for (const k of ['v_ref', 'z_ref', 'height_m', 'alt_m', 'temp_c', 'weibull_k']) s[k] = num(k);
+  s.terrain = str('terrain'); s.site = str('site'); s.material = str('material'); s.cp_preset = str('cp_preset');
+  let D = num('diameter_mm');
+  let powerNote = null;
+  if (str('mode') === 'power') { D = Math.round(Math.min(1500, Math.max(100, KATAK.diameterForPower(num('target_w'), num('target_v'), s))) / 10) * 10; powerNote = D; }
+  const g = {
+    diameter_mm: D, blades: Number(str('blades')), turns: num('turns'), angle_mode: str('angle_mode'), alpha_deg: num('alpha_deg'),
+    ld: num('ld'), hub_ratio: num('hub_ratio'), hand: Number(str('hand')),
+    nozzle_mm: Number(str('nozzle_mm')), layer_mm: num('layer_mm'), wall_mm: num('wall_mm'), detail: str('detail'),
+    bore: str('bore'), bore_kind: str('bore_kind'), ties: num('ties'), tie_mm: num('tie_mm'),
+    rim: str('rim') === 'auto' ? D >= 400 : str('rim') === 'yes', nose: str('nose') === 'yes', nose_shape: str('nose_shape'), nose_ratio: num('nose_ratio'),
+  };
+  // first pass → the steel shaft and the bearing it needs; the bearing then shapes the hub (its seats and outer diameter)
+  let geo = KATAK.resolve(g), ph = KATAK.physics(s, geo);
+  const pick = str('bearing') === 'auto' ? ph.shaft.bearing : KATAK.BEARINGS.find((b) => b.id === str('bearing'));
+  if (g.bore === 'bearings') Object.assign(g, { bore_mm: pick.d, bearing_od_mm: pick.D, bearing_w_mm: pick.B });
+  else g.bore_mm = num('bore_mm') ?? pick.d;
+  geo = KATAK.resolve(g); ph = KATAK.physics(s, geo);
+  last = { s, g, geo, ph, bearing: pick, powerNote };
+  render();
+  schedulePreview();
+}
+
+// ---- the result
+function kpi(v, u, l, hero = false) { return `<div class="kpi${hero ? ' hero' : ''}"><span class="v">${v}<small>${u}</small></span><span class="l">${l}</span></div>`; }
+function rows(list) { return list.map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join(''); }
+function render() {
+  const { s, geo, ph, bearing } = last, p = geo.p, t = T(), m = ph.model;
+  $('#kpis').innerHTML = [
+    kpi(fmt(ph.meanW, ph.meanW < 10 ? 2 : 1), unit('W'), t.k.meanW, true), kpi(fmt(ph.aep, ph.aep < 10 ? 1 : 0), unit('kWh'), t.k.aep, true),
+    kpi(fmt(ph.vHub, 1), unit('m/s'), t.k.vHub), kpi(fmt(ph.rpm.mean), unit('rpm'), t.k.rpm),
+    kpi(fmt(m.cpMax, 3), '', t.k.cp), kpi(fmt(m.lamOpt, 2), '', t.k.lam),
+    kpi(fmt(ph.torque.start * 1000, 1), unit('mNm'), t.k.start), kpi(fmt(ph.loads.park), unit('N'), t.k.park),
+  ].join('');
+  const d = geo.p, R = d.diameter_mm;
+  $('#geo-spec').innerHTML = rows([
+    [t.r.ld, fmt(p.ld, 2)], [t.r.len, `${fmt(p.ld * R)} ${unit('mm')}`], [t.r.hub, `${fmt(p.hub_od_mm, 1)} ${unit('mm')}`],
+    [t.r.rho, `${fmt(ph.rho, 3)} ${unit('kg/m³')}`], [t.r.weibull, `${fmt(ph.c, 2)} / ${fmt(ph.k, 1)}`],
+  ]);
+  $('#print-spec').innerHTML = rows([
+    [t.r.wall, `${fmt(geo.wf.wall_mm, 2)} ${unit('mm')} = ${geo.wf.lines} ${plural(geo.wf.lines, t.r.lines)}`],
+    [t.r.layer, `${fmt(geo.wf.layer_mm, 2)} / ${fmt(geo.wf.line_mm, 2)} ${unit('mm')}`],
+    [t.r.bearing, p.bore === 'bearings' ? `${bearing.id} · ${bearing.d}×${bearing.D}×${bearing.B} ${unit('mm')}` : '—'],
+  ]);
+  const extra = [
+    [t.r.wind, `${fmt(ph.windMeanW, 1)} ${unit('W')}`], [t.r.rated, `${fmt(ph.pRatedEl, 1)} ${unit('W')}`], [t.r.cf, `${fmt(ph.cf * 100, 1)} %`],
+    [t.r.rpmRated, `${fmt(ph.rpm.rated)} ${unit('rpm')}`], [t.r.run, `${fmt(ph.rpm.run)} ${unit('rpm')}`],
+    [t.r.shaft, `${fmt(ph.shaft.d_mm, 1)} ${unit('mm')}`], [t.r.bearing, `${ph.shaft.bearing.id}`],
+    [t.r.stress, `${fmt(ph.stress.sigmaRing, 1)} / ${fmt(ph.stress.allow, 1)} ${unit('MPa')}`],
+  ];
+  if (last.build) {
+    const b = last.build;
+    extra.push([t.r.size, `${b.size.map((x) => fmt(x)).join(' × ')} ${unit('mm')}`], [t.r.mass, `${fmt(b.mass)} ${unit('g')}`]);
+    if (b.nose) extra.push([t.r.nose, `⌀${fmt(b.nose.base_mm, 1)} × ${fmt(b.nose.length_mm, 1)} ${unit('mm')}`]);
+  }
+  $('#res-spec').innerHTML = rows(extra);
+  renderWarnings();
+  renderChart();
+}
+function renderWarnings() {
+  const { s, geo, ph, powerNote } = last, t = T(), p = geo.p, list = [];
+  const fill = (str, o) => str.replace(/\{(\w+)\}/g, (_, k) => o[k]);
+  if (powerNote) list.push(['ok', fill(t.w.power, { w: fmt(num('target_w'), 1), v: fmt(num('target_v'), 1), d: fmt(powerNote) })]);
+  list.push(['ok', fill(t.w.shear, { v: fmt(ph.vHub, 1), r: fmt(s.v_ref, 1) })]);
+  const cw = geo.p && last.checks;
+  for (const w of (last.checks || [])) list.push(['bad', t.w[w] || w]);
+  if (!(last.checks || []).length) list.push(['ok', t.w.ok]);
+  const aExit = p.angle_mode === 'variable' ? 60 : p.alpha_deg;
+  if (aExit > 55) list.push(['warn', fill(t.w.overhang, { a: fmt(aExit) })]);
+  if (!ph.material.outdoor) list.push(['warn', t.w.material]);
+  if (!ph.stress.ok) list.push(['warn', t.w.stress]);
+  if (geo.wf.wall_mm / p.diameter_mm > 0.015) list.push(['warn', t.w.thick]);
+  if (p.diameter_mm > 1000) list.push(['warn', t.w.big]);
+  if (s.site === 'roof' || s.site === 'yard') list.push(['warn', t.w.roof]);
+  if (last.build && Math.max(...last.build.size) > num('bed_mm')) list.push(['bad', t.w.bed]);
+  $('#warnings').innerHTML = list.map(([c, txt]) => `<li class="${c}">${txt}</li>`).join('');
+}
+function renderChart() {
+  const { ph } = last, W = 640, H = 300, L = 46, B = 30, top = 14, right = 14;
+  const vMax = 20, pts = ph.curve.filter((c) => c.v <= vMax);
+  const pMax = Math.max(1e-3, ...pts.map((c) => c.pe)), fMax = Math.max(...pts.map((c) => c.f));
+  const x = (v) => L + (W - L - right) * v / vMax, y = (pw) => H - B - (H - B - top) * pw / (pMax * 1.1);
+  let svg = '';
+  for (const c of pts) { const h = (H - B - top) * 0.9 * c.f / fMax; svg += `<rect x="${x(c.v) - 6}" y="${H - B - h}" width="12" height="${h}" fill="#FF5FB0" opacity=".22"/>`; }
+  svg += `<path d="${pts.map((c, i) => `${i ? 'L' : 'M'}${x(c.v).toFixed(1)} ${y(c.pe).toFixed(1)}`).join(' ')}" fill="none" stroke="#FF1A8C" stroke-width="3"/>`;
+  for (let v = 0; v <= vMax; v += 5) svg += `<line x1="${x(v)}" y1="${H - B}" x2="${x(v)}" y2="${top}" stroke="#3A2633"/><text x="${x(v)}" y="${H - 10}" text-anchor="middle">${v}</text>`;
+  for (let i = 0; i <= 4; i++) { const pw = pMax * 1.1 * i / 4; svg += `<text x="${L - 6}" y="${y(pw) + 4}" text-anchor="end">${fmt(pw, pMax < 10 ? 1 : 0)}</text>`; }
+  svg += `<line x1="${x(ph.vHub)}" y1="${top}" x2="${x(ph.vHub)}" y2="${H - B}" stroke="#F4EEF2" stroke-dasharray="4 4"/>`;
+  svg += `<text x="${W - right}" y="${H - B - 6}" text-anchor="end">${unit('m/s')}</text><text x="${L}" y="${top + 2}">${unit('W')}</text>`;
+  $('#chart').innerHTML = svg;
+}
+
+// ---- geometry: a quick preview build, the full build for the files
+let timer = null, ptimer = null;
+function schedule() { showModeFields(); clearTimeout(timer); timer = setTimeout(compute, 120); }
+function schedulePreview() { clearTimeout(ptimer); ptimer = setTimeout(preview, 200); }
+function buildParts(detail) {
+  const r = KATAK.build({ ...last.g, detail });
+  const mat = KATAK.MATERIALS[last.s.material] || KATAK.MATERIALS.ASA;
+  const vol = KATAK.signedVolume(r.parts.rotor) + (r.parts.nose ? KATAK.signedVolume(r.parts.nose) : 0);
+  return { r, size: KATAK.bounds(r.parts.rotor).size, mass: vol / 1000 * mat.rho, nose: r.nose };
+}
+function preview() {
   const t0 = performance.now();
-  const r = KATAK.build();
-  const stl = KATAK.toSTL(r.parts.rotor, 'rotor');
+  const b = buildParts('low');
+  last.build = b; last.checks = b.r.checks.warn;
+  viewer.show(b.r.parts.rotor, b.r.parts.nose, b.r);
+  render();
+  $('#build-info').textContent = `${fmt(b.r.parts.rotor.f.length)} △ · ${Math.round(performance.now() - t0)} ms`;
+}
+function download(part) {
+  const b = buildParts(last.g.detail);
+  const m = b.r.parts[part]; if (!m) return;
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([stl], { type: 'model/stl' }));
-  a.download = `katak-rotor-${r.params.diameter_mm}mm.stl`;
-  a.click();
-  out.textContent = `rotor: ${r.parts.rotor.f.length} triangles, wall ${r.wall.wall_mm.toFixed(3)} mm = ${r.wall.lines} lines, ${Math.round(performance.now() - t0)} ms`;
-});
+  a.href = URL.createObjectURL(new Blob([KATAK.toSTL(m, part)], { type: 'model/stl' }));
+  a.download = `katak-${part}-${b.r.params.diameter_mm}mm-${b.r.wall.lines}x${b.r.params.nozzle_mm}.stl`;
+  document.body.append(a); a.click(); a.remove();
+  $('#build-info').textContent = `${part}: ${fmt(m.f.length)} △ · ${a.download}`;
+}
+
+// ---- the WebGL preview (researches/03 §3): flat-shaded triangles, an orbit camera around the rotor's axis
+const viewer = (() => {
+  const cv = $('#view'), gl = cv.getContext('webgl', { antialias: true });
+  if (!gl) return { show() {} };
+  const vs = `attribute vec3 p; attribute vec3 n; uniform mat4 mvp; uniform mat3 nm; varying vec3 vn; void main(){ vn = nm * n; gl_Position = mvp * vec4(p, 1.0); }`;
+  const fs = `precision mediump float; varying vec3 vn; uniform vec3 col; void main(){ vec3 l = normalize(vec3(0.4, 0.6, 0.7)); float d = abs(dot(normalize(vn), l)); gl_FragColor = vec4(col * (0.28 + 0.72 * d), 1.0); }`;
+  const sh = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); return s; };
+  const prog = gl.createProgram(); gl.attachShader(prog, sh(gl.VERTEX_SHADER, vs)); gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, fs)); gl.linkProgram(prog);
+  const loc = { p: gl.getAttribLocation(prog, 'p'), n: gl.getAttribLocation(prog, 'n'), mvp: gl.getUniformLocation(prog, 'mvp'), nm: gl.getUniformLocation(prog, 'nm'), col: gl.getUniformLocation(prog, 'col') };
+  let parts = [], centre = [0, 0, 0], radius = 100, yaw = 0.7, pitch = 0.35, zoom = 1;
+  const upload = (m, xf) => {
+    const pos = new Float32Array(m.f.length * 9), nor = new Float32Array(m.f.length * 9);
+    let o = 0;
+    for (const [a, b, c] of m.f) {
+      const A = xf(m.v[a]), B = xf(m.v[b]), C = xf(m.v[c]);
+      const u = [B[0] - A[0], B[1] - A[1], B[2] - A[2]], v = [C[0] - A[0], C[1] - A[1], C[2] - A[2]];
+      const nn = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+      for (const P of [A, B, C]) { pos.set(P, o); nor.set(nn, o); o += 3; }
+    }
+    const bp = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, bp); gl.bufferData(gl.ARRAY_BUFFER, pos, gl.STATIC_DRAW);
+    const bn = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, bn); gl.bufferData(gl.ARRAY_BUFFER, nor, gl.STATIC_DRAW);
+    return { bp, bn, count: m.f.length * 3 };
+  };
+  function show(rotor, nose, r) {
+    for (const q of parts) { gl.deleteBuffer(q.bp); gl.deleteBuffer(q.bn); }
+    const bb = KATAK.bounds(rotor);
+    centre = bb.lo.map((x, i) => (x + bb.hi[i]) / 2); radius = Math.max(...bb.size) * 0.75;
+    parts = [{ ...upload(rotor, (p) => p), col: [1.0, 0.10, 0.55] }];
+    if (nose) {
+      const zFront = r.lift_mm - r.params.hub_front_mm;          // the hub's front end, where the nose cup sits
+      parts.push({ ...upload(nose, (p) => [p[0], p[1], zFront - p[2] + r.params.hub_front_mm * 0.9]), col: [0.95, 0.85, 0.92] });
+    }
+    draw();
+  }
+  function mat4mul(a, b) { const o = new Float32Array(16); for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) { let s = 0; for (let k = 0; k < 4; k++) s += a[k * 4 + j] * b[i * 4 + k]; o[i * 4 + j] = s; } return o; }
+  function draw() {
+    const w = cv.clientWidth * devicePixelRatio, h = cv.clientHeight * devicePixelRatio;
+    if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+    gl.viewport(0, 0, w, h); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); gl.enable(gl.DEPTH_TEST);
+    gl.useProgram(prog);
+    const dist = radius * 3 * zoom;
+    const eye = [centre[0] + dist * Math.cos(pitch) * Math.cos(yaw), centre[1] + dist * Math.cos(pitch) * Math.sin(yaw), centre[2] + dist * Math.sin(pitch)];
+    const f = [centre[0] - eye[0], centre[1] - eye[1], centre[2] - eye[2]]; const fl = Math.hypot(...f); f.forEach((x, i) => (f[i] = x / fl));
+    let s = [f[1] * 1 - f[2] * 0, f[2] * 0 - f[0] * 1, 0]; const sl = Math.hypot(...s) || 1; s = s.map((x) => x / sl);
+    const u = [s[1] * f[2] - s[2] * f[1], s[2] * f[0] - s[0] * f[2], s[0] * f[1] - s[1] * f[0]];
+    const view = new Float32Array([s[0], u[0], -f[0], 0, s[1], u[1], -f[1], 0, s[2], u[2], -f[2], 0,
+      -(s[0] * eye[0] + s[1] * eye[1] + s[2] * eye[2]), -(u[0] * eye[0] + u[1] * eye[1] + u[2] * eye[2]), f[0] * eye[0] + f[1] * eye[1] + f[2] * eye[2], 1]);
+    const asp = w / h, fov = 0.6, near = dist * 0.05, far = dist * 4, t = 1 / Math.tan(fov / 2);
+    const proj = new Float32Array([t / asp, 0, 0, 0, 0, t, 0, 0, 0, 0, (far + near) / (near - far), -1, 0, 0, 2 * far * near / (near - far), 0]);
+    gl.uniformMatrix4fv(loc.mvp, false, mat4mul(proj, view));
+    gl.uniformMatrix3fv(loc.nm, false, new Float32Array([view[0], view[1], view[2], view[4], view[5], view[6], view[8], view[9], view[10]]));
+    for (const q of parts) {
+      gl.uniform3fv(loc.col, q.col);
+      gl.bindBuffer(gl.ARRAY_BUFFER, q.bp); gl.enableVertexAttribArray(loc.p); gl.vertexAttribPointer(loc.p, 3, gl.FLOAT, false, 0, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, q.bn); gl.enableVertexAttribArray(loc.n); gl.vertexAttribPointer(loc.n, 3, gl.FLOAT, false, 0, 0);
+      gl.drawArrays(gl.TRIANGLES, 0, q.count);
+    }
+  }
+  let drag = null;
+  cv.addEventListener('pointerdown', (e) => { drag = [e.clientX, e.clientY]; cv.setPointerCapture(e.pointerId); });
+  cv.addEventListener('pointermove', (e) => { if (!drag) return; yaw -= (e.clientX - drag[0]) * 0.01; pitch = Math.max(-1.4, Math.min(1.4, pitch + (e.clientY - drag[1]) * 0.01)); drag = [e.clientX, e.clientY]; draw(); });
+  cv.addEventListener('pointerup', () => { drag = null; });
+  cv.addEventListener('wheel', (e) => { e.preventDefault(); zoom = Math.max(0.3, Math.min(3, zoom * (e.deltaY > 0 ? 1.1 : 0.9))); draw(); }, { passive: false });
+  addEventListener('resize', draw);
+  return { show };
+})();
+
+// ---- start
+$('#lang-select').value = lang;
+$('#lang-select').addEventListener('change', (e) => { lang = e.target.value; try { localStorage.setItem('katak-lang', lang); } catch { /* private mode */ } applyI18n(); render(); });
+$('#dl-rotor').addEventListener('click', () => download('rotor'));
+$('#dl-nose').addEventListener('click', () => download('nose'));
+applyI18n();
+compute();
+window.KATAK_PAGE = { compute, state: () => last };   // for tools/ui-run.mjs
 </script>
 </body>
 </html>
