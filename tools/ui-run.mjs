@@ -79,6 +79,15 @@ await ib.click(); await page.waitForTimeout(100); await page.mouse.move(5, 5); a
 check('ideas/07: a click pins the popup (it stays when the pointer leaves)', await pop.isVisible());
 await page.keyboard.press('Escape'); await page.waitForTimeout(100);
 check('ideas/07: Esc closes the pinned popup', !(await pop.isVisible()));
+// every field's popup carries the four sections the owner asked for, the optimum among them (a click opens each in turn)
+const short = [];
+for (const id of await page.locator('.field .info').evaluateAll((bs) => bs.map((b) => b.dataset.info))) {
+  await page.evaluate((i) => document.querySelector(`.info[data-info="${i}"]`).click(), id); await page.waitForTimeout(30);
+  const dts = await pop.locator('dt').allInnerTexts();
+  if (!(dts.length === 4 && dts.some((x) => /оптимум/i.test(x)))) short.push(`${id}:${dts.length}`);
+  await page.keyboard.press('Escape');
+}
+check('ideas/07: every popup shows «Что задаёт · Варианты и влияние · Оптимум · Источник»', short.length === 0, short.join(' ') || `all ${nInfo}`);
 
 // ---- 1c. the owner's print defaults (2026-11-16 16:42–16:43): layer 0.2 mm, wall 2 mm → snapped up to 5 lines of a 0.4 nozzle
 check('defaults: layer field 0.2, wall field 2', (await page.inputValue('#in-layer_mm')) === '0.2' && (await page.inputValue('#in-wall_mm')) === '2',
@@ -208,6 +217,11 @@ const visible = await page.evaluate(() => {
 const cyr = visible.match(/[А-Яа-яЁё][А-Яа-яЁё\s]{0,20}/g) || [];
 check('English: no Cyrillic in the visible text', cyr.length === 0, cyr.slice(0, 3).join(' | ') || 'none');
 check('English: numbers use a decimal point', /\d\.\d/.test(await kpiText()));
+await page.evaluate(() => document.querySelector('.info[data-info="nozzle_mm"]').click()); await page.waitForTimeout(100);
+const enPop = await page.locator('#info-pop').innerText();
+// the section titles are uppercased by CSS, innerText returns «OPTIMUM» — the match ignores case
+check('English: the (i) popup is English (four sections, no Cyrillic)', /optimum/i.test(enPop) && !/[А-Яа-яЁё]/.test(enPop), enPop.split('\n')[0]);
+await page.keyboard.press('Escape');
 await page.screenshot({ path: join(shots, '2-defaults-en.png'), fullPage: true });
 await page.selectOption('#lang-select', 'ru'); await settle();
 
