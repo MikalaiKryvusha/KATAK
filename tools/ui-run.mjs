@@ -59,6 +59,12 @@ const ps8 = await specText('#print-spec');
 check('nozzle 0.8 → a different line count, still whole lines', /= \d+ лини[яий]/.test(ps8) && !/1,26 мм = 3/.test(ps8), ps8.split('\n')[0]);
 await setField('nozzle_mm', '0.4'); await setField('layer_mm', ''); await setField('wall_mm', '');
 
+// ---- 2b. the build height Z is checked on its own: a 150 mm Z cannot take the upright ~196 mm rotor, X/Y 220 can
+await setField('bed_z_mm', '150');
+check('build height Z 150 mm → «превышает область печати»', /превышает область печати/.test(await page.locator('#warnings').innerText()));
+await setField('bed_z_mm', '240');
+check('control: Z back to 240 mm → no overflow warning', !/превышает область печати/.test(await page.locator('#warnings').innerText()));
+
 // ---- 3. «by power»: the page picks the diameter
 await setField('mode', 'power'); await setField('target_w', '5'); await setField('target_v', '6');
 const wp = await page.locator('#warnings').innerText();

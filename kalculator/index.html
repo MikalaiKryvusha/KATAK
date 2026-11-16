@@ -721,6 +721,7 @@ const FIELDS = [
   ['wall_mm', 'print', 'auto', '', { min: 0.4, max: 10, step: 0.1, unit: 'mm' }],
   ['material', 'print', 'sel', 'ASA', { opts: ['ASA', 'PETG', 'PACF', 'ABS', 'PLA'] }],
   ['bed_mm', 'print', 'num', 220, { min: 100, max: 1000, step: 1, unit: 'mm' }],
+  ['bed_z_mm', 'print', 'num', 240, { min: 100, max: 1000, step: 1, unit: 'mm' }],
   ['detail', 'print', 'num', 40, { min: 10, max: 100, step: 10, unit: '%' }],
   ['bore', 'print', 'sel', 'bearings', { opts: ['bearings', 'profile', 'solid'] }],
   ['bearing', 'print', 'sel', 'auto', { opts: ['auto', '608', '6000', '6001', '6002', '6003', '6004', '6005'] }],
@@ -762,7 +763,7 @@ const I18N = {
       blades: 'Число лопастей', turns: 'Число витков спирали', angle_mode: 'Закон угла раскрытия', alpha_deg: 'Угол раскрытия',
       ld: 'Отношение длины к диаметру', hub_ratio: 'Отношение диаметра ступицы к диаметру ротора', hand: 'Направление закрутки',
       cp_preset: 'Оценка коэффициента мощности', nozzle_mm: 'Диаметр сопла', layer_mm: 'Высота слоя', wall_mm: 'Толщина стенки лопасти',
-      material: 'Материал', bed_mm: 'Наибольший размер области печати', detail: 'Детализация модели', bore: 'Исполнение оси',
+      material: 'Материал', bed_mm: 'Область печати по X и Y', bed_z_mm: 'Высота области печати по Z', detail: 'Детализация модели', bore: 'Исполнение оси',
       bearing: 'Подшипник', bore_kind: 'Профиль отверстия или оси', bore_mm: 'Диаметр отверстия или оси', ties: 'Число печатных стяжек',
       tie_mm: 'Диаметр стяжки', rim: 'Обод на выходе', nose: 'Носовой обтекатель', nose_shape: 'Форма обтекателя',
       nose_ratio: 'Отношение длины обтекателя к диаметру', nose_gap_mm: 'Расстояние от ротора до обтекателя',
@@ -774,7 +775,7 @@ const I18N = {
       weibull_k: 'значение 2 соответствует распределению Рэлея', ld: 'при пустом поле определяется по условию зазора между витками',
       cp_preset: 'реалистичная оценка соответствует медиане измерений', wall_mm: 'при пустом поле 0,8 % диаметра, не менее трёх линий',
       layer_mm: 'при пустом поле половина диаметра сопла', bearing: 'по расчётному диаметру стального вала',
-      bore_mm: 'при пустом поле равен внутреннему диаметру подшипника', bed_mm: 'наибольшая из сторон X, Y, Z',
+      bore_mm: 'при пустом поле равен внутреннему диаметру подшипника', bed_mm: 'меньшая из сторон стола; ротор печатается вертикально', bed_z_mm: 'наибольшая высота печати; с ней сравнивается длина ротора',
       ties: 'осевые стойки между витками; металлические шпильки будут добавлены в следующей версии', rim: 'автоматически при диаметре от 400 мм',
       nose_gap_mm: 'между ротором и обтекателем располагается стойка переднего подшипника',
       detail: '10 % соответствует грубой сетке, 100 % наиболее плотной; превью строится при 10 %',
@@ -844,7 +845,7 @@ const I18N = {
       blades: 'Number of blades', turns: 'Number of spiral turns', angle_mode: 'Opening angle law', alpha_deg: 'Opening angle',
       ld: 'Length-to-diameter ratio', hub_ratio: 'Hub-to-rotor diameter ratio', hand: 'Winding direction',
       cp_preset: 'Power coefficient estimate', nozzle_mm: 'Nozzle diameter', layer_mm: 'Layer height', wall_mm: 'Blade wall thickness',
-      material: 'Material', bed_mm: 'Largest build dimension', detail: 'Model detail', bore: 'Axle arrangement',
+      material: 'Material', bed_mm: 'Build area in X and Y', bed_z_mm: 'Build height in Z', detail: 'Model detail', bore: 'Axle arrangement',
       bearing: 'Bearing', bore_kind: 'Hole or axle profile', bore_mm: 'Hole or axle diameter', ties: 'Number of printed ties',
       tie_mm: 'Tie diameter', rim: 'Exit rim', nose: 'Nose fairing', nose_shape: 'Fairing shape',
       nose_ratio: 'Fairing length-to-diameter ratio', nose_gap_mm: 'Distance from rotor to fairing',
@@ -856,7 +857,7 @@ const I18N = {
       weibull_k: 'the value 2 corresponds to the Rayleigh distribution', ld: 'when empty, follows from the gap condition between the turns',
       cp_preset: 'the realistic estimate corresponds to the median of measurements', wall_mm: 'when empty, 0.8 % of the diameter, at least three lines',
       layer_mm: 'when empty, half the nozzle diameter', bearing: 'from the computed steel shaft diameter',
-      bore_mm: 'when empty, equals the bearing bore', bed_mm: 'the largest of the X, Y, Z sides',
+      bore_mm: 'when empty, equals the bearing bore', bed_mm: 'the smaller side of the bed; the rotor is printed upright', bed_z_mm: 'the largest print height; the rotor length is checked against it',
       ties: 'axial posts between the turns; metal threaded rods will follow in the next version', rim: 'automatic from 400 mm in diameter',
       nose_gap_mm: 'the front bearing stand stands between the rotor and the fairing',
       detail: '10 % gives the coarsest mesh, 100 % the densest; the preview uses 10 %',
@@ -1033,7 +1034,8 @@ function renderWarnings() {
   if (geo.wf.wall_mm / p.diameter_mm > 0.015) list.push(['warn', t.w.thick]);
   if (p.diameter_mm > 1000) list.push(['warn', t.w.big]);
   if (s.site === 'roof' || s.site === 'yard') list.push(['warn', t.w.roof]);
-  if (last.build && Math.max(...last.build.size) > num('bed_mm')) list.push(['bad', t.w.bed]);
+  // X/Y against the bed, Z (the rotor printed upright) against the build height — owner 2026-11-16 16:38
+  if (last.build && (Math.max(last.build.size[0], last.build.size[1]) > num('bed_mm') || last.build.size[2] > num('bed_z_mm'))) list.push(['bad', t.w.bed]);
   $('#warnings').innerHTML = list.map(([c, txt]) => `<li class="${c}">${txt}</li>`).join('');
 }
 const axisStyle = 'stroke="#3A2633"';
