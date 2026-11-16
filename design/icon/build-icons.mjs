@@ -291,7 +291,9 @@ const mix = (a, b, t) => { const p = (h) => [1, 3, 5].map((i) => parseInt(h.slic
   return '#' + A.map((v, i) => Math.round(v + (B[i] - v) * Math.max(0, Math.min(1, t))).toString(16).padStart(2, '0')).join(''); };
 function rotor3D({ yaw = 0, pitch = 0, focal = 2.2, L = 1.25, R = 1, rh = 0.08, turns = 0.85, steps = 70, scale = 84, cx = C, cy = C,
   dark = '#0D0D0D', lit = '#5A1636', edge = '#FFB3D9', edgeW = 2.2, fogTo = '#000000', rim = '#0D0D0D', rimW = 0.09, hubFill = '#0D0D0D',
-  lag = 0.7, radial = 5, tunnel = false, edgeOnly = false, hubStroke = '#FF5FB0', edgeBand = 0, edgeFog = '#000000' }) {
+  lag = 0.7, radial = 5, tunnel = false, edgeOnly = false, hubStroke = '#FF5FB0', edgeBand = 0, edgeFog = '#000000', solidEdge = false }) {
+  // solidEdge (round 9, owner 2026-11-16 16:19: «убери точки по контуру спирали»): the edge chunks fade by COLOUR at full opacity —
+  // semi-transparent chunks overlapped at their round caps and left a denser dot at every joint.
   // edgeBand > 0 (round 6, owner: «чтобы витки не просматривались друг через друга»): the pink edge is a narrow band OF THE
   // BLADE SURFACE (the last `edgeBand` of its radius), depth-sorted with the other quads — a nearer blade hides a farther one.
   // edgeBand = 0 keeps the round-3c look: edges drawn on top of everything, so deeper turns show through.
@@ -334,7 +336,8 @@ function rotor3D({ yaw = 0, pitch = 0, focal = 2.2, L = 1.25, R = 1, rh = 0.08, 
     for (let i = 0; i < steps; i += CHUNK) {
       const pts = grid.slice(i, Math.min(steps, i + CHUNK) + 1).map((row) => row[radial]);
       const d = dep(pts);
-      edges.push({ z: -1e9 + d, el: `<path d="${pathOf(pts.map(pr))}" fill="none" stroke="${edge}" stroke-width="${f(edgeW * (1 - d * 0.7))}" stroke-opacity="${f(1 - d * 0.8)}" stroke-linecap="round" stroke-linejoin="round"/>` });
+      const strokeAttr = solidEdge ? `stroke="${mix(edge, fogTo, d * 0.8)}"` : `stroke="${edge}" stroke-opacity="${f(1 - d * 0.8)}"`;
+      edges.push({ z: -1e9 + d, el: `<path d="${pathOf(pts.map(pr))}" fill="none" ${strokeAttr} stroke-width="${f(edgeW * (1 - d * 0.7))}" stroke-linecap="round" stroke-linejoin="round"/>` });
     }
   }
   items.sort((a, b) => b.z - a.z);
@@ -548,3 +551,20 @@ writeFileSync(join(OUT, 'katak-icon-round8.html'), reviewPage('KATAK — ико�
   'По слову владельца «D5.20 — чуть светлее витки»: три шага светлоты к D5.15 и средний шаг с ободом.',
   round8));
 console.log('round 8:', round8.map((v) => v.id).join(' '), '+ katak-icon-round8.html');
+
+// =====================================================================================================================
+// Round 9 — THE ICON (owner 2026-11-16 16:19): «5.24 · Чуть светлее — и убери точки по контуру спирали». D5.24 with the edges
+// faded by colour at full opacity (solidEdge). Written as design/icon/katak-icon.svg — the project's and the page's icon.
+// =====================================================================================================================
+const finalIcon = svg('KATAK icon — the owner\'s choice 2026-11-16 16:19: D5.24 «Чуть светлее» without the dots on the spiral edges',
+  DARK_PINK_DEFS, `${DARK_PINK_TILE}${rotor3D({ ...between(0.25), solidEdge: true })}`);
+writeFileSync(join(OUT, 'katak-icon.svg'), finalIcon);
+const round9 = [
+  { id: 'd5-24', name: 'D5.24 · Чуть светлее (выбор владельца)', note: 'Как было: на кромках спирали точки на стыках.', svg: round8.find((v) => v.id === 'd5-24').svg },
+  { id: 'final', name: 'KATAK · иконка', note: 'D5.24 без точек: кромка тает в глубину цветом, а не прозрачностью.', svg: finalIcon },
+];
+writeFileSync(join(OUT, 'katak-icon-round9.html'), reviewPage('KATAK — иконка, круг 9',
+  '<b>KATAK</b> — иконка: D5.24 без точек по контуру спирали',
+  'Выбор владельца — D5.24 «Чуть светлее»; по его слову убраны точки по контуру спирали.',
+  round9));
+console.log('round 9: katak-icon.svg + katak-icon-round9.html');

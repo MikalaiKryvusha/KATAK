@@ -1,5 +1,7 @@
 <a name="english"></a>
 
+<p align="center"><img src="design/icon/katak-icon.svg" width="128" alt="KATAK icon: a dark spiral rotor seen from the nose, its three pink-edged blades winding into the depth"></p>
+
 <h2 align="center">KATAK</h2>
 
 <p align="center">
@@ -88,6 +90,8 @@ MIT — see [LICENSE](LICENSE).
 ---
 
 <a name="russian"></a>
+
+<p align="center"><img src="design/icon/katak-icon.svg" width="128" alt="Иконка KATAK: тёмный спиральный ротор со стороны носа, три лопасти с розовыми кромками уходят винтом вглубь"></p>
 
 <h2 align="center">KATAK</h2>
 
