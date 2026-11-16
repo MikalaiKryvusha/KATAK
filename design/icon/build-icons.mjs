@@ -291,7 +291,10 @@ const mix = (a, b, t) => { const p = (h) => [1, 3, 5].map((i) => parseInt(h.slic
   return '#' + A.map((v, i) => Math.round(v + (B[i] - v) * Math.max(0, Math.min(1, t))).toString(16).padStart(2, '0')).join(''); };
 function rotor3D({ yaw = 0, pitch = 0, focal = 2.2, L = 1.25, R = 1, rh = 0.08, turns = 0.85, steps = 70, scale = 84, cx = C, cy = C,
   dark = '#0D0D0D', lit = '#5A1636', edge = '#FFB3D9', edgeW = 2.2, fogTo = '#000000', rim = '#0D0D0D', rimW = 0.09, hubFill = '#0D0D0D',
-  lag = 0.7, radial = 5, tunnel = false, edgeOnly = false, hubStroke = '#FF5FB0' }) {
+  lag = 0.7, radial = 5, tunnel = false, edgeOnly = false, hubStroke = '#FF5FB0', edgeBand = 0, edgeFog = '#000000' }) {
+  // edgeBand > 0 (round 6, owner: «чтобы витки не просматривались друг через друга»): the pink edge is a narrow band OF THE
+  // BLADE SURFACE (the last `edgeBand` of its radius), depth-sorted with the other quads — a nearer blade hides a farther one.
+  // edgeBand = 0 keeps the round-3c look: edges drawn on top of everything, so deeper turns show through.
   // lag: the blade's cross-section is curved — its root at the shaft trails the edge by `lag` radians, so the blade face
   // itself is a spiral sheet (round 3a drew straight radial sections and the blades looked like flat fan sectors).
   const cyw = Math.cos(yaw), syw = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
@@ -305,22 +308,26 @@ function rotor3D({ yaw = 0, pitch = 0, focal = 2.2, L = 1.25, R = 1, rh = 0.08, 
     for (let i = 0; i <= steps; i++) {
       const t = i / steps, th = TAU * k / 3 + TAU * turns * t, r = rh + (R - rh) * Math.pow(1 - t, 0.9), z = L * t;
       const row = [];
-      for (let j = 0; j <= radial; j++) {
-        const s = j / radial, rho = rh + (r - rh) * s, a = th - lag * (1 - s) * (1 - t * 0.5);
+      const sOf = (j) => (edgeBand > 0 ? (j <= radial ? (j / radial) * (1 - edgeBand) : 1) : j / radial);
+      for (let j = 0; j <= radial + (edgeBand > 0 ? 1 : 0); j++) {
+        const s = sOf(j), rho = rh + (r - rh) * s, a = th - lag * (1 - s) * (1 - t * 0.5);
         row.push(tr([rho * Math.cos(a), rho * Math.sin(a), z]));
       }
       grid.push(row);
     }
+    const cols = radial + (edgeBand > 0 ? 1 : 0);
     for (let i = 1; i <= steps; i++) {
-      if (!edgeOnly) for (let j = 1; j <= radial; j++) {
+      if (!edgeOnly) for (let j = 1; j <= cols; j++) {
         const q = [grid[i - 1][j - 1], grid[i - 1][j], grid[i][j], grid[i][j - 1]];
         const u = q[1].map((c, m) => c - q[0][m]), w = q[3].map((c, m) => c - q[0][m]);
         const n = [u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]]; const nn = Math.hypot(...n) || 1;
         const lam = Math.abs((n[0] * light[0] + n[1] * light[1] + n[2] * light[2]) / nn);
-        const fill = mix(mix(dark, lit, lam), fogTo, dep(q) * 0.85);
+        const isEdge = edgeBand > 0 && j === cols;
+        const fill = isEdge ? mix(edge, edgeFog, dep(q) * 0.7) : mix(mix(dark, lit, lam), fogTo, dep(q) * 0.85);
         items.push({ z: q.reduce((s, p) => s + p[2], 0) / 4, el: `<path d="${pathOf(q.map(pr), true)}" fill="${fill}" stroke="${fill}" stroke-width=".7"/>` });
       }
     }
+    if (edgeBand > 0) continue;   // the band IS the edge — no on-top line
     // the blade's edge: drawn ON TOP as a continuous line in CHUNKS that fade with depth (round 3b drew it per quad, and the
     // neighbouring quads chopped it into a dotted line); the small occlusion error is invisible at icon size, a dotted edge is not.
     const CHUNK = 8;
@@ -420,3 +427,79 @@ writeFileSync(join(OUT, 'katak-icon-round4.html'), reviewPage('KATAK — ико�
   'По слову владельца: у D5 начала витков влиты в окружность (D5.7, D5.8); у D5.1 убран тёмный круг — тёмно-розовый фон и светло-розовая турбина (D5.9–D5.11). Исходники стоят рядом для сравнения.',
   round4));
 console.log('round 4:', round4.map((v) => v.id).join(' '), '+ katak-icon-round4.html');
+
+// =====================================================================================================================
+// Round 5 (owner 2026-11-16 15:50, on a screenshot of D5): «ты что не видишь, как лопасти расширяются и резко обрываются????
+// Вот просто этот обрыв продолжи дальше, влей в круг». D5 itself stays EXACTLY as it is; only the blunt end of each blade is
+// continued: the outer edge runs on along the rim, the inner edge leaves the blade's end with ITS OWN tangent and bends
+// smoothly (cubic Bézier) until it meets the rim's inner side tangentially — no cut is left. Δ = how far along the rim.
+// =====================================================================================================================
+function crescentIntoRim(k, delta, { rHub = 12, rOut = 86, sweep = Math.PI * 0.9, thick = 0.38, rimC = 88, rimIn = 83.5, steps = 60 } = {}) {
+  const ang = (t) => TAU * k / 3 - sweep * t - Math.PI / 2;
+  const P = (r, a) => [C + r * Math.cos(a), C + r * Math.sin(a)];
+  const ro = (t) => rHub + (rOut - rHub) * t, ri = (t) => rHub + (rOut - rHub) * t * (1 - thick * t);
+  const outer = [], inner = [];
+  for (let i = 0; i <= steps; i++) { const t = i / steps; outer.push(P(ro(t), ang(t))); inner.push(P(ri(t), ang(t))); }
+  const a1 = ang(1), aEnd = a1 - delta;
+  const arc = []; for (let i = 1; i <= 24; i++) arc.push(P(rimC, a1 - delta * i / 24));
+  // the inner edge's tangent at t = 1 (same derivative as the crescent's inner curve), and the rim's tangent at aEnd
+  const dr = (rOut - rHub) * (1 - 2 * thick), da = -sweep, r1 = ri(1);
+  const T0 = [dr * Math.cos(a1) - r1 * da * Math.sin(a1), dr * Math.sin(a1) + r1 * da * Math.cos(a1)];
+  const T3 = [Math.sin(aEnd), -Math.cos(aEnd)];   // moving along the circle with the angle decreasing
+  const n0 = Math.hypot(...T0), P0 = P(r1, a1), P3 = P(rimIn, aEnd);
+  const h = Math.hypot(P3[0] - P0[0], P3[1] - P0[1]) * 0.45;
+  const B1 = [P0[0] + T0[0] / n0 * h, P0[1] + T0[1] / n0 * h], B2 = [P3[0] - T3[0] * h, P3[1] - T3[1] * h];
+  const bez = []; for (let i = 0; i <= 30; i++) { const s = i / 30, u = 1 - s;
+    bez.push([u * u * u * P0[0] + 3 * u * u * s * B1[0] + 3 * u * s * s * B2[0] + s * s * s * P3[0],
+              u * u * u * P0[1] + 3 * u * u * s * B1[1] + 3 * u * s * s * B2[1] + s * s * s * P3[1]]); }
+  return [...outer, ...arc, ...bez.reverse(), ...inner.reverse()];
+}
+const d5Into = (delta) => svg(`KATAK icon D5 into the rim, ${Math.round(delta / deg)}°`, PINK_TILE_DEFS, `${PINK_TILE}
+  <circle cx="${C}" cy="${C}" r="88" fill="none" stroke="#0D0D0D" stroke-width="9" filter="url(#shadow)"/>
+  <g fill="#0D0D0D">${[0, 1, 2].map((k) => `<path d="${pathOf(crescentIntoRim(k, delta), true)}"/>`).join('')}</g>
+  <circle cx="${C}" cy="${C}" r="13" fill="#0D0D0D" stroke="#FF5FB0" stroke-width="3"/>`);
+const DARK3 = { dark: '#0D0D0D', lit: '#4A1030', edge: '#FF5FB0', edgeW: 3.4, fogTo: '#9E0D57', rimW: 0, hubFill: '#0D0D0D', hubStroke: '#FF5FB0' };
+const round5 = [
+  { id: 'd5', name: 'D5 · Ротор Liam (сохранён)', note: 'Исходник: лопасть расширяется и обрывается торцом.', svg: variationsD.find((v) => v.id === 'd5').svg },
+  { id: 'd5-12', name: 'D5.12 · Обрыв влит в круг, 60°', note: 'Та же лопасть D5; торец продолжен — внутренняя кромка плавно уходит в обод на 60°.', svg: d5Into(60 * deg) },
+  { id: 'd5-13', name: 'D5.13 · Обрыв влит в круг, 85°', note: 'То же, вливается длиннее — на 85°.', svg: d5Into(85 * deg) },
+  { id: 'd5-14', name: 'D5.14 · Обрыв влит в круг, 110°', note: 'То же, самое длинное вливание — на 110°, почти до соседней лопасти.', svg: d5Into(110 * deg) },
+  // owner 2026-11-16 15:51: «D5.9 · Светлая турбина — хорошо, но давай тёмную турбину попробуем»
+  { id: 'd5-9', name: 'D5.9 · Светлая турбина (было)', note: 'Исходник для сравнения.', svg: round4.find((v) => v.id === 'd5-9').svg },
+  { id: 'd5-15', name: 'D5.15 · Тёмная турбина', note: 'Как D5.9, но турбина тёмная; розовые кромки, глубина тает в тёмно-розовый фон.',
+    svg: svg('KATAK icon D5.15', DARK_PINK_DEFS, `${DARK_PINK_TILE}${rotor3D({ ...DARK3, focal: 1.6, turns: 1.0 })}`) },
+  { id: 'd5-16', name: 'D5.16 · Тёмная, светлые кромки', note: 'Тёмная турбина со светло-розовыми кромками — спираль контрастнее.',
+    svg: svg('KATAK icon D5.16', DARK_PINK_DEFS, `${DARK_PINK_TILE}${rotor3D({ ...DARK3, edge: '#FFE6F2', focal: 1.6, turns: 1.0 })}`) },
+  { id: 'd5-17', name: 'D5.17 · Тёмная, полтора витка', note: 'Тёмная турбина, лопасти делают полтора витка.',
+    svg: svg('KATAK icon D5.17', DARK_PINK_DEFS, `${DARK_PINK_TILE}${rotor3D({ ...DARK3, focal: 1.5, turns: 1.5, steps: 120 })}`) },
+  { id: 'd5-18', name: 'D5.18 · Тёмная на яркой плитке', note: 'Тёмная турбина без круга на ярко-розовой плитке, как у D5.',
+    svg: svg('KATAK icon D5.18', PINK_TILE_DEFS, `${PINK_TILE}${rotor3D({ ...DARK3, fogTo: '#FF3D9E', focal: 1.6, turns: 1.0 })}`) },
+];
+for (const v of round5) if (!['d5', 'd5-9'].includes(v.id)) writeFileSync(join(OUT, `katak-icon-${v.id}.svg`), v.svg);
+writeFileSync(join(OUT, 'katak-icon-round5.html'), reviewPage('KATAK — иконка, круг 5',
+  '<b>KATAK</b> — иконка, круг 5: обрыв лопасти D5 влит в круг',
+  'По слову владельца: «этот обрыв продолжи дальше, влей в круг» — лопасти D5 не тронуты, продолжен только их торец (D5.12–D5.14); «D5.9 хорошо, но давай тёмную турбину» — D5.15–D5.18.',
+  round5));
+console.log('round 5:', round5.map((v) => v.id).join(' '), '+ katak-icon-round5.html');
+
+// =====================================================================================================================
+// Round 6 (owner 2026-11-16 15:54): «пробуем D5.15 · Тёмная турбина, варианты: исходный · чтобы витки не просматривались
+// друг через друга · чтобы просматривались, но темнее витки · исходный + окружность для крепления витков».
+// =====================================================================================================================
+const D515 = { ...DARK3, focal: 1.6, turns: 1.0 };
+const round6 = [
+  { id: 'd5-15', name: 'D5.15 · Исходный', note: 'Тёмная турбина, розовые кромки поверх — дальние витки видны сквозь ближние.',
+    svg: round5.find((v) => v.id === 'd5-15').svg },
+  { id: 'd5-19', name: 'D5.19 · Витки не просвечивают', note: 'Кромка — узкая розовая полоса самой лопасти: ближний виток честно закрывает дальний.',
+    svg: svg('KATAK icon D5.19', DARK_PINK_DEFS, `${DARK_PINK_TILE}${rotor3D({ ...D515, edgeBand: 0.07, edgeFog: '#2A0A1C', radial: 6 })}`) },
+  { id: 'd5-20', name: 'D5.20 · Просвечивают, витки темнее', note: 'Как исходный, но сами витки темнее — кромки ярче на их фоне.',
+    svg: svg('KATAK icon D5.20', DARK_PINK_DEFS, `${DARK_PINK_TILE}${rotor3D({ ...D515, dark: '#050203', lit: '#24070F', fogTo: '#4A0626' })}`) },
+  { id: 'd5-21', name: 'D5.21 · Исходный + обод крепления', note: 'Исходный, и витки крепятся к тёмной окружности-ободу по раструбу.',
+    svg: svg('KATAK icon D5.21', DARK_PINK_DEFS, `${DARK_PINK_TILE}${rotor3D({ ...D515, rimW: 0.085, rim: '#0D0D0D' })}`) },
+];
+for (const v of round6) if (v.id !== 'd5-15') writeFileSync(join(OUT, `katak-icon-${v.id}.svg`), v.svg);
+writeFileSync(join(OUT, 'katak-icon-round6.html'), reviewPage('KATAK — иконка, круг 6',
+  '<b>KATAK</b> — иконка, круг 6: тёмная турбина D5.15',
+  'По слову владельца: исходный · витки не просвечивают друг через друга · просвечивают, но витки темнее · исходный + окружность для крепления витков.',
+  round6));
+console.log('round 6:', round6.map((v) => v.id).join(' '), '+ katak-icon-round6.html');
