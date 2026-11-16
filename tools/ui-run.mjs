@@ -74,6 +74,12 @@ check('defaults: no layer-range warning at nozzle 0.4', !/Высота слоя 
 // the owner's Ender-3 defaults (2026-11-16 16:53–16:54): D 220, PETG, detail 70 %, bearing 608, build volume 220 × 220 × 250
 const defs = await page.evaluate(() => Object.fromEntries(['diameter_mm', 'material', 'detail', 'bearing', 'bed_mm', 'bed_z_mm'].map((id) => [id, document.getElementById('in-' + id).value])));
 check('defaults: D 220, PETG, detail 70, bearing 608, bed 220 × 250', JSON.stringify(defs) === JSON.stringify({ diameter_mm: '220', material: 'PETG', detail: '70', bearing: '608', bed_mm: '220', bed_z_mm: '250' }), JSON.stringify(defs));
+// Minsk (owner 16:53, researches/05): 3.7 m/s at 10 m, suburb, roof above the ridge, 220 m, 7 °C, k 2
+const site = await page.evaluate(() => Object.fromEntries(['v_ref', 'z_ref', 'terrain', 'site', 'alt_m', 'temp_c', 'weibull_k'].map((id) => [id, document.getElementById('in-' + id).value])));
+check('defaults: the site is Minsk', JSON.stringify(site) === JSON.stringify({ v_ref: '3.7', z_ref: '10', terrain: 'suburb', site: 'roof_high', alt_m: '220', temp_c: '7', weibull_k: '2' }), JSON.stringify(site));
+// the power curve of the AWM brochure (researches/06): the result table names the maximum at 14 m/s, the chart says «максимум 14,0»
+check('result: «Наибольшая мощность при 14 м/с» is shown', /Наибольшая мощность при 14 м\/с/.test(await specText('#res-spec')));
+check('chart: the 14 m/s mark reads «максимум 14,0»', (await page.locator('#chart').innerText().catch(() => '')) !== null && (await page.locator('#chart').evaluate((s) => s.textContent)).includes('максимум 14,0'));
 check('defaults: 608 on the bearing row of the print table', /608 · 8×22×7 мм/.test(await specText('#print-spec')));
 // the 608 bore (8 mm) is below the computed steel shaft at D 220 → the page says so; control — 6001 (12 mm) → no such line
 const ws = await page.locator('#warnings').innerText();
@@ -113,7 +119,8 @@ await setField('mode', 'diameter');
 // ---- 3b. the power chart (ideas/09, owner 2026-11-16 16:47): two axes, named speed marks, a legend on the chart; hovering
 // 10 m/s shows the box with the speed, the power equal to the core's curve point at 10 m/s, and the share of time
 const ct = await page.locator('#chart').evaluate((s) => [...s.querySelectorAll('text')].map((t) => t.textContent).join(' | '));
-check('chart: legend and named marks (включение, номинал, отключение, средняя; доля времени)', ['электрическая мощность', 'доля времени', 'включение 3,0', 'номинал 12,5', 'отключение 14,0', 'средняя'].every((w) => ct.includes(w)), ct.slice(0, 160));
+// «максимум 14,0»: the 14 m/s mark follows the brochure's «Maximum» since the curve holds there (researches/06 §5)
+check('chart: legend and named marks (включение, номинал, максимум, средняя; доля времени)', ['электрическая мощность', 'доля времени', 'включение 3,0', 'номинал 12,5', 'максимум 14,0', 'средняя'].every((w) => ct.includes(w)), ct.slice(0, 160));
 check('chart: the right axis is in %', /\| %( \||$)/.test(ct));
 await page.locator('#chart').scrollIntoViewIfNeeded();   // the mouse acts in the viewport: the chart must be on screen
 const box = await page.locator('#chart').boundingBox();
@@ -140,6 +147,14 @@ for (const [btn, part] of [['#dl-rotor', 'rotor'], ['#dl-nose', 'nose']]) {
   check(`download ${part}: binary STL, size = 84 + 50·N`, bytes.length === 84 + 50 * n && n > 500, `${dl.suggestedFilename()}, ${n} triangles`);
   if (part === 'rotor') check('preview triangles = rotor STL triangles (the preview uses the print detail)', n === tris40, `${tris40} vs ${n}`);
 }
+// ---- 4b. bugs/01: «оживало» downloads a nose of its own shape — slimmer than the ellipsoid (the volume of the STL itself)
+const stlVolume = (bytes) => { let v = 0; const n = bytes.readUInt32LE(80); for (let i = 0; i < n; i++) { const o = 84 + 50 * i + 12, f = (k) => bytes.readFloatLE(o + 4 * k);
+  const a = [f(0), f(1), f(2)], b = [f(3), f(4), f(5)], c = [f(6), f(7), f(8)]; v += (a[0] * (b[1] * c[2] - b[2] * c[1]) - a[1] * (b[0] * c[2] - b[2] * c[0]) + a[2] * (b[0] * c[1] - b[1] * c[0])) / 6; } return v; };
+const noseVol = async (shape) => { await setField('nose_shape', shape); const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#dl-nose')]);
+  const f = join(shots, `nose-${shape}.stl`); await dl.saveAs(f); return stlVolume(readFileSync(f)); };
+const vEl = await noseVol('ellipse'), vOg = await noseVol('ogive');
+check('bugs/01: the «оживало» nose STL is ≥ 3 % smaller in volume than the «эллипсоид» one', vOg < 0.97 * vEl, `${vOg.toFixed(0)} vs ${vEl.toFixed(0)} mm³`);
+await setField('nose_shape', 'ellipse');
 
 // ---- 5. English: no Cyrillic left in the visible text (the language list itself names «Русский»)
 await page.selectOption('#lang-select', 'en'); await settle();

@@ -77,6 +77,22 @@ for (const shape of ['ellipse', 'ogive', 'cone']) {
   check('exit rim on a 450 mm rotor: closed', K.checkClosed(r2.parts.rotor).closed);
   check('defaults: validity checks pass (root rises, blades keep a gap)', r2.checks.warn.length === 0 && K.build({ detail: 'low' }).checks.warn.length === 0, JSON.stringify(K.build({ detail: 'low' }).checks));
 }
+{
+  // @guard ogive-is-not-ellipsoid (bugs/01)
+  // THREAT:         the «оживало» choice silently produces another shape (the ellipsoid) in the STL the user prints
+  // PROVED-AGAINST: the committed core where the ogive was normalised with L = 1 (volumes equal, mid radius 0.866)
+  // GAP:            checks one aspect ratio (0.8) and the volume / mid-length radius, not every point of the profile
+  // ON-REAL-PATH:   NOT YET — the page's nose STL is not opened in a slicer by this check
+  const nv = (shape) => { const r = K.build({ detail: 'medium', nose_shape: shape, nose_ratio: 0.8 }); return { V: K.signedVolume(r.parts.nose), m: r.parts.nose, b: K.bounds(r.parts.nose) }; };
+  const og = nv('ogive'), el = nv('ellipse');
+  check('ogive nose is slimmer than the ellipsoid nose (volume ≥ 3 % smaller)', og.V < 0.97 * el.V, `${og.V.toFixed(0)} vs ${el.V.toFixed(0)} mm³`);
+  // the radius at mid-length: the widest vertex in a thin slab around half the nose length, against the tangent ogive formula
+  const L = 1.6, rho = (1 + L * L) / 2, rMid = Math.sqrt(rho * rho - (L - L / 2) ** 2) + 1 - rho;   // in units of the base radius
+  const Rb = og.b.size[0] / 2, zMid = og.b.lo[2] + og.b.size[2] / 2;
+  const slab = og.m.v.filter((p) => Math.abs(p[2] - zMid) < og.b.size[2] * 0.02).map((p) => Math.hypot(p[0] - (og.b.lo[0] + Rb), p[1] - (og.b.lo[1] + og.b.size[1] / 2)) / Rb);
+  const got = Math.max(...slab);
+  check('ogive nose: radius at mid-length = tangent ogive 0.810·R (ellipsoid would be 0.866)', Math.abs(got - rMid) < 0.02, `${got.toFixed(3)} vs ${rMid.toFixed(3)}`);
+}
 
 // ---- 3. placement and size
 console.log('3. placement and size');
@@ -130,6 +146,11 @@ console.log('5. physics');
   check('control: the pessimistic preset gives less energy than the realistic one', pess.aep < big.aep, `${pess.aep.toFixed(0)} < ${big.aep.toFixed(0)}`);
   const dP = K.diameterForPower(5, 6, { ...K.SITE_DEFAULTS });
   check('«by power»: 5 W at 6 m/s needs a rotor of a few hundred mm', dP > 150 && dP < 600, dP.toFixed(0) + ' mm');
+  // the shape of the AWM «Nett Power Curve» (researches/06 §2.2): rises up to 14 m/s, holds to the survival speed 35 m/s
+  const pa = (v) => big.curve.find((c) => Math.abs(c.v - v) < 1e-9).pa;
+  check('curve: the power at 14 m/s / at 12.5 m/s = (14/12.5)³ — the brochure gives 140/100 and ≈770/550', near(pa(14) / pa(12.5), (14 / 12.5) ** 3, 1e-9), (pa(14) / pa(12.5)).toFixed(3));
+  check('curve: a plateau from 14 to 25 m/s (the brochure plots it to 24 m/s)', near(pa(20), pa(14), 1e-9) && near(pa(25), pa(14), 1e-9) && pa(14) > 0, `${pa(14).toFixed(1)} W`);
+  check('control: the maximum at 14 m/s is the electrical pMaxEl and exceeds the rated one', big.pMaxEl > big.pRatedEl, `${big.pMaxEl.toFixed(1)} > ${big.pRatedEl.toFixed(1)} W`);
 }
 
 console.log(`-- ${total - bad} of ${total} as expected`);

@@ -500,7 +500,8 @@ const KATAK = (() => {
     const rb = (p.bore_mm + p.nose_fit_mm) / 2, Lb = Math.min(Ln * 0.6, Math.max(6, 1.5 * p.bore_mm));   // blind bore: depth ≈ 1.5·axle
     const shape = (u) => {                                  // u: 0 at the base → 1 at the tip; returns r/Rb  (§6.8 [53])
       if (p.nose_shape === 'cone') return 1 - u;
-      if (p.nose_shape === 'ogive') { const L = 1, rho = (1 + L * L) / 2, x = 1 - u; return Math.sqrt(Math.max(0, rho * rho - (L - x) * (L - x))) + 1 - rho; }
+      // the tangent ogive in units of Rb: length L = Ln/Rb (bugs/01 — L = 1 made it the ellipsoid), x from the tip
+      if (p.nose_shape === 'ogive') { const L = Ln / Rb, rho = (1 + L * L) / 2, x = (1 - u) * L; return Math.sqrt(Math.max(0, rho * rho - (L - x) * (L - x))) + 1 - rho; }
       return Math.sqrt(Math.max(0, 1 - u * u));             // ellipsoid
     };
     const outer = [];
@@ -636,11 +637,13 @@ const KATAK = (() => {
     const vHub = windAt(s.v_ref, s.z_ref, s.height_m, z0);
     const k = s.weibull_k, c = weibullC(vHub, k);
     const m = rotorModel({ ...p, cp_preset: s.cp_preset }, wall, vHub);   // the Cp preset is the user's site-level choice
-    const vIn = s.v_in, vRated = s.v_rated, vOut = s.v_out, idle = s.p_idle;
+    const vIn = s.v_in, vRated = s.v_rated, vOut = s.v_out, vSurv = s.v_survival, idle = s.p_idle;
     const nOf = (v) => 60 * m.lamOpt * v / (Math.PI * D);                // rpm, §4.1
     const nRated = nOf(vRated);
     const eta = (v) => interp(nOf(v) / nRated, 0.15, 1.0, 0.34, 0.80);   // §4.5 η_chain(n/n_rated)
-    const pAero = (v) => (v < vIn || v >= vOut ? 0 : Math.min(0.5 * rho * A * Math.pow(Math.min(v, vRated), 3) * cpAt(m, m.lamOpt), Infinity));
+    // the curve of the AWM brochure (researches/06 §2.2, §5): the power rises up to v_out = 14 m/s («Maximum») and holds there
+    // — the brake and the MPPT keep the rotor at its cut-out rpm — up to the survival speed 35 m/s; above it the rotor is parked
+    const pAero = (v) => (v < vIn || v > vSurv ? 0 : 0.5 * rho * A * Math.pow(Math.min(v, vOut), 3) * cpAt(m, m.lamOpt));
     const pEl = (v) => Math.max(0, eta(Math.min(v, vRated)) * pAero(v) - (pAero(v) > 0 ? idle : 0));
     const curve = [];
     for (let v = 0; v <= 25 + 1e-9; v += 0.5) curve.push({ v, pa: pAero(v), pe: pEl(v), f: weibullPdf(v, c, k) });
@@ -665,7 +668,7 @@ const KATAK = (() => {
     const vTipRun = m.lamRun * vOut, sigmaRing = mat.rho * 1000 * vTipRun * vTipRun / 1e6;
     return {
       rho, z0, vHub, k, c, model: m, curve, meanW, aep, windMeanW: wind, cf: pRatedEl > 0 ? meanW / pRatedEl : 0, fSite,
-      pRatedEl, rpm: { mean: nOf(vHub), rated: nRated, run: 60 * m.lamRun * vOut / (Math.PI * D) },
+      pRatedEl, pMaxEl: pEl(vOut), rpm: { mean: nOf(vHub), rated: nRated, run: 60 * m.lamRun * vOut / (Math.PI * D) },
       torque: { rated: q(vRated, m.lamOpt), start: q0 },
       loads: { park: fPark, op: fOp, moment: M, overhang_m: a },
       shaft: { d_mm: dShaft, bearing }, stress: { vTipRun, sigmaRing, allow: mat.sz / 3.3, ok: sigmaRing <= mat.sz / 3.3 },
@@ -678,7 +681,8 @@ const KATAK = (() => {
     return Math.sqrt(8 * pW / (eta * rho * Math.PI * v * v * v * cp)) * 1000;
   }
   const SITE_DEFAULTS = { v_ref: 4.5, z_ref: 10, height_m: 6, terrain: 'crops', alt_m: 200, temp_c: 10, weibull_k: 2,
-    site: 'rural', v_in: 3, v_rated: 12.5, v_out: 14, p_idle: 0.2, ve50: 42, material: 'ASA', cp_preset: 'realistic' };
+    site: 'rural', v_in: 3, v_rated: 12.5, v_out: 14, v_survival: 35, p_idle: 0.2, ve50: 42, material: 'ASA', cp_preset: 'realistic' };
+  // v_in 3 · v_rated 12.5 · v_out 14 · v_survival 35 m/s — the AWM brochure, p. 8 (researches/06 §2.1)
 
   // ---------------------------------------------------------------- binary STL (researches/03 §2)
   // 80-byte header (must not start with "solid"), uint32 count, 50 bytes per triangle, little-endian. [NOT-TESTED]
@@ -709,14 +713,17 @@ const KATAK = (() => {
 const $ = (s) => document.querySelector(s);
 
 // ---- the fields: [id, form, type, default, {min, max, step, unit, opts}]; labels and hints come from the dictionary
+// The site defaults are Minsk (owner 2026-11-16 16:53 «город Минск по умолчанию»; researches/05): 3.7 m/s at 10 m — the open
+// airfield Minsk-1, METAR 1991–2018 [РАСЧЁТ], within the Hydromet range 3.5–4.0 m/s; k 2.0; 220 m; 7 °C. The terrain «suburb»
+// and the placement «roof above the ridge» are the agent's choice [AI] (researches/05 §1: no climate source can give them).
 const FIELDS = [
-  ['v_ref', 'site', 'num', 4.5, { min: 1, max: 15, step: 0.1, unit: 'm/s' }],
+  ['v_ref', 'site', 'num', 3.7, { min: 1, max: 15, step: 0.1, unit: 'm/s' }],
   ['z_ref', 'site', 'num', 10, { min: 1, max: 100, step: 1, unit: 'm' }],
   ['height_m', 'site', 'num', 6, { min: 1, max: 60, step: 0.5, unit: 'm' }],
-  ['terrain', 'site', 'sel', 'crops', { opts: ['sea', 'snow', 'open', 'crops', 'scattered', 'park', 'suburb', 'city'] }],
-  ['site', 'site', 'sel', 'rural', { opts: ['field', 'rural', 'roof_high', 'roof', 'yard'] }],
-  ['alt_m', 'site', 'num', 200, { min: 0, max: 4000, step: 10, unit: 'm' }],
-  ['temp_c', 'site', 'num', 10, { min: -30, max: 45, step: 1, unit: '°C' }],
+  ['terrain', 'site', 'sel', 'suburb', { opts: ['sea', 'snow', 'open', 'crops', 'scattered', 'park', 'suburb', 'city'] }],
+  ['site', 'site', 'sel', 'roof_high', { opts: ['field', 'rural', 'roof_high', 'roof', 'yard'] }],
+  ['alt_m', 'site', 'num', 220, { min: 0, max: 4000, step: 10, unit: 'm' }],
+  ['temp_c', 'site', 'num', 7, { min: -30, max: 45, step: 1, unit: '°C' }],
   ['weibull_k', 'site', 'num', 2, { min: 1.2, max: 3.5, step: 0.1 }],
   ['mode', 'turbine', 'sel', 'diameter', { opts: ['diameter', 'power'] }],
   // 220 mm — owner 2026-11-16 16:53 «диаметр ротора максимальный возможный для Эндера 3 220мм по уполчанию»; upright it takes
@@ -791,7 +798,7 @@ const I18N = {
       nose_ratio: 'Отношение длины обтекателя к диаметру', nose_gap_mm: 'Расстояние от ротора до обтекателя',
     },
     h: {
-      v_ref: 'среднегодовое значение по данным метеостанции или ветрового атласа', z_ref: 'стандартная высота флюгера метеостанции 10 м',
+      v_ref: 'среднегодовое значение по данным метеостанции или ветрового атласа; по умолчанию Минск', z_ref: 'стандартная высота флюгера метеостанции 10 м',
       terrain: 'задаёт длину шероховатости z₀ в логарифмическом профиле скорости', site: 'задаёт коэффициент выработки площадки f_site',
       alt_m: 'определяет плотность воздуха по стандартной атмосфере', temp_c: 'определяет плотность воздуха',
       weibull_k: 'значение 2 соответствует распределению Рэлея', ld: 'при пустом поле определяется по условию зазора между витками',
@@ -821,11 +828,11 @@ const I18N = {
       wall: 'Толщина стенки лопасти', layer: 'Высота слоя и ширина линии', ld: 'Отношение длины к диаметру', len: 'Длина ротора', hub: 'Диаметр ступицы',
       size: 'Габарит печати', mass: 'Масса пластика (ротор и обтекатель)', shaft: 'Минимальный диаметр стального вала', bearing: 'Подшипник',
       rpmRated: 'Частота вращения при 12,5 м/с', run: 'Частота вращения разноса', stress: 'Напряжение на кромке при разносе',
-      rho: 'Плотность воздуха', weibull: 'Параметры Вейбулла c и k', wind: 'Мощность ветрового потока через ротор', rated: 'Мощность при 12,5 м/с',
+      rho: 'Плотность воздуха', weibull: 'Параметры Вейбулла c и k', wind: 'Мощность ветрового потока через ротор', rated: 'Мощность при 12,5 м/с', maxP: 'Наибольшая мощность при 14 м/с',
       cf: 'Коэффициент использования установленной мощности', nose: 'Обтекатель', lines: ['линия', 'линии', 'линий'],
       height: 'высота, м', speed: 'скорость ветра, м/с', measured: 'измерение', install: 'установка', diameter: 'D', length: 'L',
       nozzle: 'сопло', step: 'шаг', layerShort: 'слой',
-      cutIn: 'включение', meanV: 'средняя', ratedV: 'номинал', cutOut: 'отключение',
+      cutIn: 'включение', meanV: 'средняя', ratedV: 'номинал', cutOut: 'максимум',
       legPower: 'электрическая мощность', legShare: 'доля времени на интервал 0,5 м/с', legMean: 'средняя скорость ветра',
       tipV: 'Скорость ветра', tipP: 'Мощность', tipS: 'Доля времени',
     },
@@ -878,7 +885,7 @@ const I18N = {
       nose_ratio: 'Fairing length-to-diameter ratio', nose_gap_mm: 'Distance from rotor to fairing',
     },
     h: {
-      v_ref: 'annual mean from a weather station or a wind atlas', z_ref: 'the standard vane height of a weather station is 10 m',
+      v_ref: 'annual mean from a weather station or a wind atlas; the default is Minsk', z_ref: 'the standard vane height of a weather station is 10 m',
       terrain: 'sets the roughness length z₀ of the logarithmic speed profile', site: 'sets the site yield factor f_site',
       alt_m: 'determines the air density by the standard atmosphere', temp_c: 'determines the air density',
       weibull_k: 'the value 2 corresponds to the Rayleigh distribution', ld: 'when empty, follows from the gap condition between the turns',
@@ -908,11 +915,11 @@ const I18N = {
       wall: 'Blade wall thickness', layer: 'Layer height and line width', ld: 'Length-to-diameter ratio', len: 'Rotor length', hub: 'Hub diameter',
       size: 'Build size', mass: 'Plastic mass (rotor and fairing)', shaft: 'Minimum steel shaft diameter', bearing: 'Bearing',
       rpmRated: 'Rotational speed at 12.5 m/s', run: 'Runaway rotational speed', stress: 'Tip stress at runaway',
-      rho: 'Air density', weibull: 'Weibull parameters c and k', wind: 'Wind power through the rotor', rated: 'Power at 12.5 m/s',
+      rho: 'Air density', weibull: 'Weibull parameters c and k', wind: 'Wind power through the rotor', rated: 'Power at 12.5 m/s', maxP: 'Maximum power at 14 m/s',
       cf: 'Capacity factor', nose: 'Fairing', lines: ['line', 'lines', 'lines'],
       height: 'height, m', speed: 'wind speed, m/s', measured: 'measurement', install: 'installation', diameter: 'D', length: 'L',
       nozzle: 'nozzle', step: 'pitch', layerShort: 'layer',
-      cutIn: 'cut-in', meanV: 'mean', ratedV: 'rated', cutOut: 'cut-out',
+      cutIn: 'cut-in', meanV: 'mean', ratedV: 'rated', cutOut: 'maximum',
       legPower: 'electrical power', legShare: 'share of time per 0.5 m/s bin', legMean: 'mean wind speed',
       tipV: 'Wind speed', tipP: 'Power', tipS: 'Share of time',
     },
@@ -1039,7 +1046,7 @@ function render() {
     [t.r.bearing, p.bore === 'bearings' ? `${bearing.id} · ${bearing.d}×${bearing.D}×${bearing.B} ${unit('mm')}` : '—'],
   ]);
   const extra = [
-    [t.r.wind, `${fmt(ph.windMeanW, 1)} ${unit('W')}`], [t.r.rated, `${fmt(ph.pRatedEl, 1)} ${unit('W')}`], [t.r.cf, `${fmt(ph.cf * 100, 1)} %`],
+    [t.r.wind, `${fmt(ph.windMeanW, 1)} ${unit('W')}`], [t.r.rated, `${fmt(ph.pRatedEl, 1)} ${unit('W')}`], [t.r.maxP, `${fmt(ph.pMaxEl, 1)} ${unit('W')}`], [t.r.cf, `${fmt(ph.cf * 100, 1)} %`],
     [t.r.rpmRated, `${fmt(ph.rpm.rated)} ${unit('rpm')}`], [t.r.run, `${fmt(ph.rpm.run)} ${unit('rpm')}`],
     [t.r.shaft, `${fmt(ph.shaft.d_mm, 1)} ${unit('mm')}`], [t.r.bearing, `${ph.shaft.bearing.id}`],
     [t.r.stress, `${fmt(ph.stress.sigmaRing, 1)} / ${fmt(ph.stress.allow, 1)} ${unit('MPa')}`],

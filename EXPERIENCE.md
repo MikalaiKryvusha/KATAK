@@ -80,6 +80,20 @@
 
 ## Entries
 
+### EXP-0005 · 2026-11-16 · ❌→✅ · #geometry #normalise #select #tests
+class: field-dropped-in-rebuild
+mechanized: kalculator/test.mjs @guard ogive-is-not-ellipsoid + tools/ui-run.mjs case «bugs/01»
+**Context:** the nose fairing profiles of the core (ellipsoid · ogive · cone), written in units of the base radius.
+**Tried / did:** normalised the tangent ogive with `const L = 1` — the length-to-radius ratio of the field never reached it.
+**Result:** ❌ the «оживало» option silently produced the ellipsoid (a tangent ogive with L = R is a quarter circle); the
+closedness tests stayed green because both shapes are closed. ✅ `L = Ln / Rb` (bugs/01).
+**Lesson:** when a formula is normalised, every dimension it had becomes a ratio that must still be passed in; and every
+option of a select must produce an output different from its siblings — a test that only checks validity cannot see a
+wrong-but-valid shape.
+**Repro:** `node kalculator/test.mjs` — part 2, «ogive nose is slimmer than the ellipsoid nose».
+**Trigger:** adding a shape or mode to a select → add a check that its output differs from the other options'.
+**Not for:** options that are meant to coincide at a boundary value (they need a non-boundary input in the check).
+
 ### EXP-0004 · 2026-11-16 · ❌→✅ · #stamp #clock #hooks
 class: claim-before-evidence
 mechanized: tools/hooks/stamp-gate.mjs — refuses a today-stamp later than the clock before it lands in a file

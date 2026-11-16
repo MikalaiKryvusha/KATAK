@@ -113,7 +113,7 @@
 | Видеокарта | NVIDIA GeForce RTX 5070 Ti, 16 ГБ, драйвер 621.01 | `nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv` |
 | WSL | не установлен | `wsl.exe --status` |
 | Слайсеры и 3D | OrcaSlicer · PrusaSlicer (Prusa3D) · Creality Print · Blender — в `C:\Program Files` | `ls "/c/Program Files"` |
-| Python-пакеты | numpy 2.5.4 · matplotlib 3.11.2 (нет scipy, trimesh, gmsh) | `python -m pip list` |
+| Python-пакеты | numpy 2.5.4 · matplotlib 3.11.2 (нет scipy, trimesh, gmsh); в пользовательских пакетах (`%APPDATA%\Python\Python314`) — PyMuPDF (`fitz`) и pypdf: ими читаются PDF (текст и страницы в PNG; `pdftoppm` на машине нет) | `python -E -P -c "import fitz"` — ключ `-I` прячет пользовательские пакеты (2026-11-16) |
 | `TEMP` / `TMP` | `F:\Temp` | `echo $TEMP` |
 | Ловушки, оплаченные инцидентами | heredoc с обратным слэшем в Git Bash портит пути (опыт KUMM: EXP-0029, EXP-0120) — хук `no-backslash-heredoc` | — |
 
