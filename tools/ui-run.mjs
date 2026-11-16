@@ -110,6 +110,23 @@ const wp = await page.locator('#warnings').innerText();
 check('«by power» 5 W at 6 m/s → a diameter is suggested', /Для мощности 5(,0)? Вт при скорости ветра 6(,0)? м\/с требуется ротор диаметром около [\d\s ]+ мм/.test(wp), (wp.match(/Для мощности.*мм/) || [''])[0]);
 await setField('mode', 'diameter');
 
+// ---- 3b. the power chart (ideas/09, owner 2026-11-16 16:47): two axes, named speed marks, a legend on the chart; hovering
+// 10 m/s shows the box with the speed, the power equal to the core's curve point at 10 m/s, and the share of time
+const ct = await page.locator('#chart').evaluate((s) => [...s.querySelectorAll('text')].map((t) => t.textContent).join(' | '));
+check('chart: legend and named marks (включение, номинал, отключение, средняя; доля времени)', ['электрическая мощность', 'доля времени', 'включение 3,0', 'номинал 12,5', 'отключение 14,0', 'средняя'].every((w) => ct.includes(w)), ct.slice(0, 160));
+check('chart: the right axis is in %', /\| %( \||$)/.test(ct));
+await page.locator('#chart').scrollIntoViewIfNeeded();   // the mouse acts in the viewport: the chart must be on screen
+const box = await page.locator('#chart').boundingBox();
+const at10 = 46 + (640 - 46 - 46) * 10 / 20;              // the chart's own x(10) in its 640-wide viewBox
+await page.mouse.move(box.x + at10 * box.width / 640, box.y + box.height * 0.5); await page.waitForTimeout(150);
+const tip = await page.evaluate(() => ({ vis: document.getElementById('chart-tip').getAttribute('visibility'), text: document.getElementById('chart-tip').textContent }));
+const pe10 = await page.evaluate(() => window.KATAK_PAGE.state().ph.curve.find((c) => c.v === 10).pe);
+const tipW = Number((tip.text.match(/Мощность: ([\d,]+)/) || ['', 'NaN'])[1].replace(',', '.'));
+check('chart hover at 10 m/s: «Скорость ветра: 10,0 м/с», power = the core curve at 10 m/s, a share of time', tip.vis === 'visible' && /Скорость ветра: 10,0 м\/с/.test(tip.text) && Math.abs(tipW - pe10) < 0.006 && /Доля времени: [\d,]+ %/.test(tip.text), `${tip.text} · core ${pe10.toFixed(3)}`);
+await page.screenshot({ path: join(shots, '1e-chart-hover.png'), clip: { x: box.x - 8, y: box.y - 8, width: box.width + 16, height: box.height + 16 } });
+await page.mouse.move(box.x - 40, box.y - 40); await page.waitForTimeout(100);
+check('control: the pointer leaves the chart → the box hides', (await page.evaluate(() => document.getElementById('chart-tip').getAttribute('visibility'))) === 'hidden');
+
 // ---- 4. downloads: rotor and nose as valid binary STL; the preview is built at the print detail (owner 2026-11-16 16:43),
 // so the preview's triangle count equals the rotor STL's; control — detail 10 % gives a smaller preview than 40 %
 const previewTris = async () => Number(((await page.locator('#build-info').innerText()).match(/^([\d\s ]+) △/) || ['', ''])[1].replace(/\D/g, ''));

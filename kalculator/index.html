@@ -67,6 +67,9 @@ a { color: var(--accent2); }
 .cols { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 20px; align-items: start; }
 .chart { width: 100%; height: auto; background: var(--surface2); border: 1px solid var(--rule); border-radius: 12px; }
 .chart text { fill: var(--muted); font: 11px var(--body); }
+.chart .hit { cursor: crosshair; }
+.chart .tip-box { fill: #1F161D; stroke: var(--accent); }
+.chart .tip text { fill: var(--ink); font-size: 12px; }
 table.spec { width: 100%; border-collapse: collapse; font-size: 14px; }
 table.spec td { padding: 6px 4px; border-bottom: 1px solid var(--rule); vertical-align: top; }
 table.spec td:last-child { text-align: right; font-family: var(--mono); color: var(--ink); white-space: nowrap; }
@@ -164,7 +167,7 @@ footer { color: var(--muted); font-size: 13px; display: flex; flex-direction: co
   <div class="side">
     <div class="kpis" id="kpis"></div>
     <div class="cols">
-      <div><svg class="chart" id="chart" viewBox="0 0 640 300" role="img"></svg><p class="note" data-i18n="chartcap"></p></div>
+      <div><svg class="chart" id="chart" viewBox="0 0 640 330" role="img"></svg><p class="note" data-i18n="chartcap"></p></div>
       <div><table class="spec" id="res-spec"></table></div>
     </div>
     <ul class="notes" id="warnings"></ul>
@@ -770,7 +773,7 @@ const I18N = {
     s3t: 'Параметры печати', s3p: 'Схема показывает поперечное сечение стенки лопасти. Толщина стенки округляется вверх до целого числа экструзионных линий выбранного сопла.',
     s4t: 'Результаты расчёта', s4p: 'Значения получены по расчётной модели. Фактическая выработка установки на кровле, как правило, ниже расчётной.',
     s5t: 'Трёхмерная модель и файлы STL', s5p: 'Модель показывает установку: ротор на неподвижной оси, стойку переднего подшипника, носовой обтекатель перед стойкой и генератор за ротором. Ротор печатается с вертикальной осью носовой частью вниз; обтекатель печатается отдельно вершиной вверх.',
-    chartcap: 'Сплошная линия: электрическая мощность в зависимости от скорости ветра. Столбцы: плотность распределения скорости ветра на площадке. Штриховая линия: средняя скорость на высоте установки.',
+    chartcap: 'Кривая показывает электрическую мощность установки при каждой скорости ветра. Столбцы показывают долю времени, в течение которой ветер на площадке дует с этой скоростью. Средняя мощность равна сумме произведений мощности на долю времени по всем скоростям с поправкой на размещение. Наведение мыши или касание графика показывает значения в выбранной точке.',
     viewcap: 'Вращение: перетаскивание мышью. Масштаб: колесо мыши.',
     dlrotor: 'Скачать STL ротора', dlnose: 'Скачать STL обтекателя',
     foot1: 'KATAK (Krinik Archimedes Turbine Automated Kalculator). Модель Cp(λ) по исследованиям спиральных турбин; нагрузки по IEC 61400-2.',
@@ -822,6 +825,9 @@ const I18N = {
       cf: 'Коэффициент использования установленной мощности', nose: 'Обтекатель', lines: ['линия', 'линии', 'линий'],
       height: 'высота, м', speed: 'скорость ветра, м/с', measured: 'измерение', install: 'установка', diameter: 'D', length: 'L',
       nozzle: 'сопло', step: 'шаг', layerShort: 'слой',
+      cutIn: 'включение', meanV: 'средняя', ratedV: 'номинал', cutOut: 'отключение',
+      legPower: 'электрическая мощность', legShare: 'доля времени на интервал 0,5 м/с', legMean: 'средняя скорость ветра',
+      tipV: 'Скорость ветра', tipP: 'Мощность', tipS: 'Доля времени',
     },
     w: {
       ok: 'Геометрия удовлетворяет проверкам: корневая кромка лопасти расположена за носовой частью, зазор между витками достаточен.',
@@ -854,7 +860,7 @@ const I18N = {
     s3t: 'Printing parameters', s3p: 'The diagram shows the cross-section of the blade wall. The wall thickness is rounded up to a whole number of extrusion lines of the selected nozzle.',
     s4t: 'Results', s4p: 'The values are model estimates. The actual yield of a roof installation is, as a rule, lower than the estimate.',
     s5t: 'Three-dimensional model and STL files', s5p: 'The model shows the installation: the rotor on a fixed axle, the front bearing stand, the nose fairing ahead of the stand and the generator behind the rotor. The rotor is printed with a vertical axis, nose down; the fairing is printed separately, tip up.',
-    chartcap: 'Solid line: electrical power as a function of wind speed. Bars: probability density of the wind speed at the site. Dashed line: mean speed at the installation height.',
+    chartcap: 'The curve shows the electrical power of the installation at each wind speed. The bars show the share of time during which the wind at the site blows at that speed. The mean power is the sum of the products of power and share of time over all speeds, corrected for the placement. Hovering the mouse over the chart, or tapping it, shows the values at the chosen point.',
     viewcap: 'Rotation: drag with the mouse. Zoom: mouse wheel.',
     dlrotor: 'Download rotor STL', dlnose: 'Download fairing STL',
     foot1: 'KATAK (Krinik Archimedes Turbine Automated Kalculator). Cp(λ) model from studies of spiral turbines; loads after IEC 61400-2.',
@@ -906,6 +912,9 @@ const I18N = {
       cf: 'Capacity factor', nose: 'Fairing', lines: ['line', 'lines', 'lines'],
       height: 'height, m', speed: 'wind speed, m/s', measured: 'measurement', install: 'installation', diameter: 'D', length: 'L',
       nozzle: 'nozzle', step: 'pitch', layerShort: 'layer',
+      cutIn: 'cut-in', meanV: 'mean', ratedV: 'rated', cutOut: 'cut-out',
+      legPower: 'electrical power', legShare: 'share of time per 0.5 m/s bin', legMean: 'mean wind speed',
+      tipV: 'Wind speed', tipP: 'Power', tipS: 'Share of time',
     },
     w: {
       ok: 'The geometry satisfies the checks: the blade root edge lies behind the nose, the gap between the turns is sufficient.',
@@ -1068,20 +1077,68 @@ function renderWarnings() {
   $('#warnings').innerHTML = list.map(([c, txt]) => `<li class="${c}">${txt}</li>`).join('');
 }
 const axisStyle = 'stroke="#3A2633"';
+// ---- step 4: the power curve over the site's wind (ideas/09, owner 2026-11-16 16:47 «графику нехватает пояснений и интерактива
+// ховером мыши»): two axes — electrical power (left, W) and the share of time per 0.5 m/s bin (right, %); the cut-in, rated
+// and cut-out speeds and the mean speed marked and named; the legend on the chart; hovering (a tap on a phone) shows the
+// speed, the power and the share of time at that point. [NOT-TESTED]
+const BIN = 0.5;                                     // the core builds the curve every 0.5 m/s (physics → curve)
+let chartGeo = null;                                 // what the hover needs from the last render
 function renderChart() {
-  const { ph } = last, W = 640, H = 300, L = 46, B = 30, top = 14, right = 14;
+  const { ph, s } = last, t = T(), W = 640, H = 330, L = 46, R = 46, B = 58, top = 40;
   const vMax = 20, pts = ph.curve.filter((c) => c.v <= vMax);
-  const pMax = Math.max(1e-3, ...pts.map((c) => c.pe)), fMax = Math.max(...pts.map((c) => c.f));
-  const x = (v) => L + (W - L - right) * v / vMax, y = (pw) => H - B - (H - B - top) * pw / (pMax * 1.1);
+  const share = (c) => c.f * BIN * 100;              // probability of the 0.5 m/s bin around c.v, %
+  const pMax = Math.max(1e-3, ...pts.map((c) => c.pe)) * 1.1, sMax = Math.max(1e-6, ...pts.map(share)) / 0.9;
+  const x = (v) => L + (W - L - R) * v / vMax, y = (pw) => H - B - (H - B - top) * pw / pMax, ys = (sh) => H - B - (H - B - top) * sh / sMax;
+  const pd = pMax < 11 ? 1 : 0, sd = sMax < 10 ? 1 : 0;
   let svg = '';
-  for (const c of pts) { const h = (H - B - top) * 0.9 * c.f / fMax; svg += `<rect x="${x(c.v) - 6}" y="${H - B - h}" width="12" height="${h}" fill="#FF5FB0" opacity=".22"/>`; }
+  for (const c of pts) { const yb = ys(share(c)); svg += `<rect x="${x(c.v) - 6}" y="${yb.toFixed(1)}" width="12" height="${(H - B - yb).toFixed(1)}" fill="#FF5FB0" opacity=".22"/>`; }
+  for (let v = 0; v <= vMax; v += 5) svg += `<line x1="${x(v)}" y1="${H - B}" x2="${x(v)}" y2="${top}" ${axisStyle}/><text x="${x(v)}" y="${H - B + 18}" text-anchor="middle">${v}</text>`;
+  for (let i = 0; i <= 4; i++) {
+    svg += `<text x="${L - 6}" y="${y(pMax * i / 4) + 4}" text-anchor="end">${fmt(pMax * i / 4, pd)}</text>`;
+    svg += `<text x="${W - R + 6}" y="${ys(sMax * i / 4) + 4}">${fmt(sMax * i / 4, sd)}</text>`;
+  }
+  // the characteristic speeds: row 1 and row 2 of the band above the plot, so neighbouring labels never overlap
+  for (const [v, label, row, dash] of [[s.v_in, t.r.cutIn, 1], [ph.vHub, t.r.meanV, 2, true], [s.v_rated, t.r.ratedV, 1], [s.v_out, t.r.cutOut, 2]]) {
+    const yl = row === 1 ? 14 : 29;
+    svg += `<line x1="${x(v)}" y1="${yl + 4}" x2="${x(v)}" y2="${H - B}" stroke="${dash ? '#F4EEF2' : '#A99AA3'}" ${dash ? 'stroke-dasharray="4 4"' : 'opacity=".55"'}/>`;
+    svg += `<text x="${x(v)}" y="${yl}" text-anchor="middle"${dash ? ' fill="#F4EEF2"' : ''}>${label} ${fmt(v, 1)}</text>`;
+  }
   svg += `<path d="${pts.map((c, i) => `${i ? 'L' : 'M'}${x(c.v).toFixed(1)} ${y(c.pe).toFixed(1)}`).join(' ')}" fill="none" stroke="#FF1A8C" stroke-width="3"/>`;
-  for (let v = 0; v <= vMax; v += 5) svg += `<line x1="${x(v)}" y1="${H - B}" x2="${x(v)}" y2="${top}" ${axisStyle}/><text x="${x(v)}" y="${H - 10}" text-anchor="middle">${v}</text>`;
-  for (let i = 0; i <= 4; i++) { const pw = pMax * 1.1 * i / 4; svg += `<text x="${L - 6}" y="${y(pw) + 4}" text-anchor="end">${fmt(pw, pMax < 10 ? 1 : 0)}</text>`; }
-  svg += `<line x1="${x(ph.vHub)}" y1="${top}" x2="${x(ph.vHub)}" y2="${H - B}" stroke="#F4EEF2" stroke-dasharray="4 4"/>`;
-  svg += `<text x="${W - right}" y="${H - B - 6}" text-anchor="end">${unit('m/s')}</text><text x="${L}" y="${top + 2}">${unit('W')}</text>`;
+  svg += `<text x="${L - 6}" y="${top - 8}" text-anchor="end">${unit('W')}</text><text x="${W - R + 6}" y="${top - 8}">%</text>`;
+  svg += `<text x="${W - R + 10}" y="${H - B + 18}">${unit('m/s')}</text>`;   // right of the last tick «20», under the % axis
+  // the legend: one row under the speed axis
+  const ly = H - 12;
+  svg += `<line x1="${L}" y1="${ly - 4}" x2="${L + 22}" y2="${ly - 4}" stroke="#FF1A8C" stroke-width="3"/><text x="${L + 28}" y="${ly}">${t.r.legPower}</text>`;
+  svg += `<rect x="${L + 210}" y="${ly - 10}" width="12" height="12" fill="#FF5FB0" opacity=".45"/><text x="${L + 228}" y="${ly}">${t.r.legShare}</text>`;
+  svg += `<line x1="${L + 430}" y1="${ly - 10}" x2="${L + 430}" y2="${ly + 2}" stroke="#F4EEF2" stroke-dasharray="3 3"/><text x="${L + 438}" y="${ly}">${t.r.legMean}</text>`;
+  // the hover layer: a vertical line, a dot on the curve, a box with three lines; a transparent hit area on top
+  svg += `<g class="tip" id="chart-tip" visibility="hidden"><line class="tip-line" y1="${top}" y2="${H - B}" stroke="#F4EEF2" opacity=".6"/>` +
+    `<circle class="tip-dot" r="5" fill="#FF1A8C" stroke="#F4EEF2"/><rect class="tip-box" width="176" height="58" rx="6"/>` +
+    `<text class="tip-t1"/><text class="tip-t2"/><text class="tip-t3"/></g>`;
+  svg += `<rect class="hit" x="${L}" y="${top}" width="${W - L - R}" height="${H - B - top}" fill="transparent"/>`;
   $('#chart').innerHTML = svg;
+  chartGeo = { W, L, R, top, H, B, vMax, x, y, pts, share, t };
 }
+// hover and tap: the nearest curve point (0.5 m/s) to the pointer; the box flips to the left near the right edge
+function chartTip(e) {
+  const svg = $('#chart'), g = $('#chart-tip'); if (!chartGeo || !g) return;
+  const { W, L, R, top, vMax, x, y, pts, share, t } = chartGeo, rc = svg.getBoundingClientRect();
+  const sx = (e.clientX - rc.left) * W / rc.width;
+  const v = Math.round(Math.min(vMax, Math.max(0, (sx - L) / (W - L - R) * vMax)) / BIN) * BIN;
+  const c = pts.find((p) => Math.abs(p.v - v) < 1e-9); if (!c) return;
+  const px = x(c.v), py = y(c.pe), bx = px + 186 > W - R ? px - 186 : px + 10, by = top + 6;
+  g.querySelector('.tip-line').setAttribute('x1', px); g.querySelector('.tip-line').setAttribute('x2', px);
+  g.querySelector('.tip-dot').setAttribute('cx', px); g.querySelector('.tip-dot').setAttribute('cy', py);
+  const box = g.querySelector('.tip-box'); box.setAttribute('x', bx); box.setAttribute('y', by);
+  const lines = [`${t.r.tipV}: ${fmt(c.v, 1)} ${unit('m/s')}`, `${t.r.tipP}: ${fmt(c.pe, c.pe < 10 ? 2 : 1)} ${unit('W')}`, `${t.r.tipS}: ${fmt(share(c), 1)} %`];
+  lines.forEach((txt, i) => { const el = g.querySelector('.tip-t' + (i + 1)); el.setAttribute('x', bx + 10); el.setAttribute('y', by + 18 + i * 16); el.textContent = txt; });
+  g.setAttribute('visibility', 'visible');
+}
+const chartHide = () => { const g = $('#chart-tip'); if (g) g.setAttribute('visibility', 'hidden'); };
+$('#chart').addEventListener('pointermove', chartTip);
+$('#chart').addEventListener('pointerdown', chartTip);
+$('#chart').addEventListener('pointerleave', (e) => { if (e.pointerType !== 'touch') chartHide(); });
+document.addEventListener('pointerdown', (e) => { if (!$('#chart').contains(e.target)) chartHide(); });
 
 // ---- step 1: the wind speed profile over height for the chosen terrain (the same law the calculation uses)
 function vizSite() {

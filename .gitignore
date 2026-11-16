@@ -32,3 +32,6 @@ interviews/decisions/*.lock
 # The owner's voice portrait - the PUBLIC snapshot (copy of D:/work/ai_sandbox/KAIF/AUTHOR_STYLOMETRY.md); the repo is public
 # and a portrait may quote the owner's private writing, so it lives on disk and never ships (owner 2026-11-16).
 AUTHOR_STYLOMETRY.md
+
+# third-party documents the owner downloads for reference (copyrighted, the repository is public) — read, never committed
+/*.pdf
