@@ -1,0 +1,29 @@
+{
+  "name": "katak",
+  "version": "0.1.0",
+  "description": "KATAK — Krinik Archimedes Turbine Automated Kalculator: a browser tool that sizes an Archimedes spiral wind turbine for your site and generates its STL for 3D printing",
+  "license": "MIT",
+  "type": "module",
+  "private": true,
+  "author": "Mikalai Kryvusha (KOT KRINIK)",
+  "homepage": "https://github.com/MikalaiKryvusha/KATAK",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MikalaiKryvusha/KATAK.git"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node kalculator/test.mjs",
+    "test:hooks": "node tools/test-hooks.mjs",
+    "ui-run": "node tools/ui-run.mjs",
+    "icons": "node design/icon/build-icons.mjs",
+    "kaif:version": "node .kaif/kaif-core.mjs version",
+    "kaif:check": "node .kaif/kaif-core.mjs check",
+    "kaif:update": "node .kaif/kaif-core.mjs update"
+  },
+  "devDependencies": {
+    "kuips": "github:MikalaiKryvusha/KUIPS#v1.3.1"
+  }
+}
