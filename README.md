@@ -52,8 +52,12 @@ computer.
    the layer height defaults to half the nozzle.
 5. **Generates the STL.** The rotor (three blades on the ruled spiral surface of the studies, the hub with bearing seats
    or a profiled bore — round, hexagon, D-cut, square — or a printed axle, ties between the turns, an optional exit rim)
-   and the nose as a separate part — ellipsoid, ogive or cone. Every file is a closed mesh; four levels of detail.
-6. **Says what to expect.** A printed rotor of 0.2–0.6 m gives single watts — enough for a sensor, a light or a
+   and the nose fairing as a separate part — ellipsoid, ogive or cone — that sits on the axle 10 to 100 mm ahead of the rotor.
+   Every file is a closed mesh; the detail is set from 10 to 100 %.
+6. **Shows each step.** The wind profile over height for your terrain, the rotor from the side with its dimensions, the
+   cross-section of the blade wall in nozzle lines, the power curve over the wind distribution, and a 3D view of the
+   installation with a horizontal axis: the rotor on a fixed axle, the front bearing stand, the nose fairing and the generator.
+7. **Says what to expect.** A printed rotor of 0.2–0.6 m gives single watts — enough for a sensor, a light or a
    classroom rig. The page warns about overhangs that need supports, a plastic not meant for the sun, a model larger than
    the printer bed and a runaway speed that needs an electric brake.
 
@@ -134,9 +138,12 @@ MIT — see [LICENSE](LICENSE).
    умолчанию — половина сопла.
 5. **Генерирует STL.** Ротор: три лопасти на линейчатой спиральной поверхности из исследований; ступица с посадками под
    подшипники, или с профильным отверстием (круг, шестигранник, D-срез, квадрат), или с печатной осью; стяжки между
-   витками; обод на выходе — по желанию. Нос — отдельная деталь: эллипсоид, оживало или конус. Каждый файл — замкнутая
-   сетка; детализация — четыре уровня.
-6. **Говорит, чего ждать.** Печатный ротор 0,2–0,6 м даёт единицы ватт: хватит датчику, подсветке, учебному стенду.
+   витками; обод на выходе — по желанию. Носовой обтекатель — отдельная деталь в форме эллипсоида, оживала или конуса; он
+   садится на ось в 10–100 мм перед ротором. Каждый файл — замкнутая сетка; детализация задаётся от 10 до 100 %.
+6. **Показывает каждый шаг.** Профиль ветра по высоте для выбранной местности, ротор сбоку с размерами, сечение стенки
+   лопасти по линиям сопла, кривая мощности на фоне распределения ветра и 3D-модель установки с горизонтальной осью: ротор
+   на неподвижной оси, стойка переднего подшипника, носовой обтекатель и генератор.
+7. **Говорит, чего ждать.** Печатный ротор 0,2–0,6 м даёт единицы ватт: хватит датчику, подсветке, учебному стенду.
    Страница предупреждает о нависаниях, которым нужны поддержки, о пластике, который не держит солнце, о модели больше
    стола принтера и об оборотах разноса, при которых нужен электрический тормоз.
 

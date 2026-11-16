@@ -40,8 +40,11 @@ Site + Wishes ──▶ Recommender ──▶ Design ──▶ PhysicsModel ─�
 
 - One HTML file, zero dependencies, works offline from disk — the KEINKT Calibrator pattern the owner pointed to (GOAL.md).
 - The 3D preview is hand-written WebGL, not a library: keeps the file self-contained (decision log in `MASTER_PLAN.md`).
+- The preview shows the owner's installation scheme (ideas/04): horizontal axis, rotor on a fixed axle, front bearing stand,
+  the nose fairing ON THE AXLE 10–100 mm ahead of the rotor (blind bore = axle diameter), generator behind. The page's rotor
+  diagram reads `KATAK.sideView()` — the same geometry as the STL, so the drawing cannot drift from the file.
 
-## Project hooks (tools/hooks, ported from KUMM on the owner's word 2026-11-16)
+## Project hooks (tools/hooks, ported from KUMM — owner 2026-11-16: «посмотри, какие там есть полезные хуки, и заведи себе такие»)
 
 - `no-permission-question.mjs` — Stop: a turn may not end by asking leave for the agent's own next step.
 - `no-backslash-heredoc.mjs` — PreToolUse(Bash): a heredoc body with a backslash is refused (Git Bash collapses it here).

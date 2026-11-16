@@ -529,7 +529,7 @@ mesh closure, STL bytes. Hooks of the project: `node tools/test-hooks.mjs`. Wind
 ## Test harness (how the agent observes & drives the software)
 
 `node tools/ui-run.mjs` drives `kalculator/index.html` in this machine's Chrome through Playwright (the owner allowed it
-without asking — `HOUSE_RULES.md` R3): switches the language, fills the inputs, reads the results, downloads the STL and
+without asking — `HOUSE_RULES.md` R3, his words «тестируй прямо на этом ПК в дебаг хроме, РАЗРЕШАЮ»): switches the language, fills the inputs, reads the results, downloads the STL and
 saves screenshots for the run report in `testcases/reports/`. A generated STL is also sliced by OrcaSlicer / PrusaSlicer
 from the CLI (installed on the machine) to prove it prints. Grow this tooling
 over time; each command, stand and device gets its row in the house-rules file — `HOUSE_RULES.md` →

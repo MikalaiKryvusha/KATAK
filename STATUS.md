@@ -8,16 +8,17 @@
 
 ## Что сделано (короткий хвост)
 
-### Сессия 1 — 2026-11-16: от GOAL.md до публичного прототипа ✅
-- **KAIF 2.9 + пре-релиз 2.10** развёрнут с канала `main`; полевой отчёт — https://github.com/MikalaiKryvusha/KAIF/issues/197.
-  Хуки: 15 от KAIF (в т. ч. «тест после кода») + 4 из KUMM в `tools/hooks/` (набор `node tools/test-hooks.mjs` 67/67).
-- **Правила владельца** R1–R6 в `HOUSE_RULES.md`: временное — `.work/tmp`; ≤ 2 субагентов, вложенные считаются; тест в
-  Chrome без спроса; каждая разведка — конспект; JS — `.mjs`; только Windows, без WSL.
-- **Разведки:** `researches/01` физика и инженерия спиральной турбины (52 источника), `02` 3D-печать под сопло, `03` веб и STL.
-- **Иконка** выбрана владельцем: D5.24 без точек → `design/icon/katak-icon.svg` (`homeworks/01_icon_choice.md`, 9 кругов).
-- **Прототип калькулятора** `kalculator/index.html`: ядро физики и геометрии + страница RU/EN (5 шагов, график, предупреждения,
-  WebGL-превью, STL ротора и носа). Ядро: `node kalculator/test.mjs` 57/57. Страница в Chrome: `node tools/ui-run.mjs` 12/12.
-  STL проходят `--info` PrusaSlicer (manifold = yes). Отчёт прогона — `testcases/reports/2026-11-16_kalculator-prototype.md`.
+### Сессия 1 — 2026-11-16 15:06 → 16:31 +03:00: от GOAL.md до публичного прототипа ✅
+- **KAIF 2.9 + пре-релиз 2.10** с канала `main`; полевой отчёт — https://github.com/MikalaiKryvusha/KAIF/issues/197.
+  Хуки: 15 от KAIF + 4 из KUMM в `tools/hooks/` (`node tools/test-hooks.mjs` 67/67).
+- **Правила владельца** R1–R6 в `HOUSE_RULES.md` (временное в `.work/tmp` · ≤ 2 субагентов · тест в Chrome без спроса ·
+  разведка — конспект · `.mjs` · только Windows).
+- **Разведки:** `researches/01` физика спиральной турбины (52 источника), `02` 3D-печать под сопло, `03` веб и STL.
+- **Иконка** — выбор владельца: D5.24 без точек → `design/icon/katak-icon.svg` (`homeworks/01`, 9 кругов).
+- **Калькулятор** `kalculator/index.html` (один файл, офлайн): ядро физики и геометрии; страница RU/EN в академическом
+  регистре; рисунок на каждом шаге (профиль ветра, ротор сбоку, сечение стенки, кривая мощности); горизонтальная 3D-модель
+  установки (ось, стойка переднего подшипника, обтекатель в 10–100 мм перед ротором, генератор); STL ротора и обтекателя;
+  детализация 10–100 %. Ядро `node kalculator/test.mjs` 60/60; Chrome `node tools/ui-run.mjs` 16/16; PrusaSlicer — manifold.
 - **Публичный репозиторий** https://github.com/MikalaiKryvusha/KATAK (MIT, README EN + RU по портрету голоса).
 
 ---
@@ -27,36 +28,46 @@
 | Фаза (`MASTER_PLAN.md`) | Статус | Что там |
 |------|--------|---------|
 | 0 · фундамент | ✅ | KAIF, хуки, домашние правила, KUIPS 1.3.1 в devDependencies |
-| 1 · лицо | ✅ | иконка выбрана; README, LICENSE, репозиторий |
-| 2 · знание | ✅ первый круг | три конспекта; CFD-проверка — `ideas/02` (решение владельца) |
-| 3 · макеты | 🔲 | лист KUIPS по готовой странице: `npx kuips init / shoot / layout / build / check` |
-| 4 · прототип | 🔧 | работает, ждёт взгляда владельца и печати первого ротора |
-| 5 · релиз 1.0 | 🔲 | один HTML-файл без внешних картинок, GitHub Pages — по слову владельца |
+| 1 · лицо | ✅ | иконка, README, LICENSE, репозиторий |
+| 2 · знание | ✅ первый круг | три конспекта; CFD — `ideas/02` (вопрос ждёт ответа владельца) | <!-- attribution-ok: a pending question, no decision claimed -->
+| 3 · макеты | 🔲 | лист KUIPS не собран |
+| 4 · прототип | 🔧 | работает; идеи владельца 05 и 06 — следующие |
+| 5 · релиз 1.0 | 🔲 | один самодостаточный HTML; GitHub Pages — после вопроса владельцу | <!-- attribution-ok: a future gate, no decision claimed -->
 
 ---
 
-## 🤖 Автономный пул задач
+## 🤖 Автономный пул задач (по ценности)
 
-- [ ] Лист KUIPS экранов калькулятора (фаза 3 — `design/flow-map/`).
-- [ ] Нарезка STL в OrcaSlicer/PrusaSlicer из CLI с профилем принтера (G-code) — в `tools/ui-run.mjs` или отдельным прогоном.
-- [ ] Вшить иконку в страницу (data URI), чтобы скачанный один файл `index.html` был самодостаточным (сейчас ссылка `../design/icon/`).
-- [ ] Смысловой проход §7B чистым экземпляром по README и текстам страницы (машинная проверка портрета — 0 попаданий; §7B не сделан).
-- [ ] Посадочный «пробник» зазоров (идея в `researches/02` §6).
+- [ ] **Идея 07 — ПЕРВОЙ** (слово владельца в момент закрытия): кнопка (i) у каждой опции, окно с пояснением, вариантами,
+  влиянием и оптимумом (`ideas/07_info_popups_per_option.md`).
+- [ ] **Идея 05** — тип распорок: без распорок · печатные · металлические шпильки M3/M4/M5 под углом конуса (отверстия с
+  бобышками в сетке лопасти; решение расписано в `ideas/05_spacer_types_metal_studs.md`).
+- [ ] **Идея 06** — города мира по часовым поясам с ветром по кругу 300 км: сначала разведка источника (Global Wind Atlas,
+  ERA5, NASA POWER, лицензия) → `researches/04_…`, затем `tools/wind-presets.mjs` (`ideas/06_world_cities_wind_presets.md`).
+- [ ] Вшить иконку в страницу (data URI): скачанный один `index.html` сейчас ссылается на `../design/icon/katak-icon.svg`.
+- [ ] Нарезка STL слайсером из CLI с профилем принтера (G-code) в прогоне.
+- [ ] Лист KUIPS экранов калькулятора (`npx kuips init / shoot / layout / build / check`).
+- [ ] Смысловой проход §7B чистым экземпляром по README и текстам страницы (машинная проверка портрета — 0 попаданий).
 
 ## ❓ Ждёт владельца
 
-- 🧰 Посмотреть калькулятор (`kalculator/index.html`) и напечатать первый ротор — впечатления → `ideas/`.
-- ❓ Инструменты симуляции под Windows (FluidX3D / SU2 / CalculiX) — `ideas/02_simulation_tools.md`.
-- 🧰 Переименовать папку проекта в `KRINIK_Archimedes_Turbine_Automated_Kalculator` после закрытия VS Code (пока в ней
-  открыта сессия, Windows не даёт): `Rename-Item "D:\work\ai_sandbox\KRINIK_Archimedes_Turbine_Automated_Calculator" "KRINIK_Archimedes_Turbine_Automated_Kalculator"`.
+- 🧰 Посмотреть страницу (горизонтальная модель, рисунки, академические тексты) и напечатать первый ротор.
+- ❓ Инструменты симуляции под Windows — `ideas/02_simulation_tools.md`.
+- 🧰 Переименовать папку после закрытия VS Code — команда PowerShell:
+  `Rename-Item "D:\work\ai_sandbox\KRINIK_Archimedes_Turbine_Automated_Calculator" "KRINIK_Archimedes_Turbine_Automated_Kalculator"`.
+  Память агента уже скопирована под новое имя (`~/.claude/projects/d--work-ai-sandbox-KRINIK-Archimedes-Turbine-Automated-Kalculator/memory/`).
 
 ---
 
 ## Где продолжить
 
-1. `node kalculator/test.mjs` (57/57) и `node tools/ui-run.mjs` (12/12) — убедиться, что дерево зелёное.
-2. Взять задачу из пула выше; новое от владельца — в `ideas/`.
-3. При правке `kalculator/index.html` хук «тест после кода» требует `node tools/ui-run.mjs` до остановки.
+1. `node kalculator/test.mjs` (60/60) и `node tools/ui-run.mjs` (16/16) — дерево зелёное.
+2. Взять идею 07 (кнопки (i) с пояснениями), затем идею 05 (шпильки — замечание владельца о перемычках).
+3. Любая правка `kalculator/index.html` → хук «тест после кода» требует `node tools/ui-run.mjs` до остановки.
+4. Время в тексте — только из `date` той же минуты (хук `stamp-gate` отказывает штампу впереди часов, EXP-0004).
+
+KNOWLEDGE: схема установки владельца (неподвижная ось, передний подшипник, обтекатель на оси в 10–100 мм) · `ideas/04`;
+распорки-стойки не помещаются в наклонной лопасти · `ideas/05`, код `ties()`; урок о штампах времени · `EXPERIENCE.md` EXP-0004.
 
 ---
 

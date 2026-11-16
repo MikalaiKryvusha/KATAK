@@ -80,6 +80,17 @@
 
 ## Entries
 
+### EXP-0004 · 2026-11-16 · ❌→✅ · #stamp #clock #hooks
+class: claim-before-evidence
+mechanized: tools/hooks/stamp-gate.mjs — refuses a today-stamp later than the clock before it lands in a file
+**Context:** writing moments into documents (MASTER_PLAN, a run report, memory) during a long session.
+**Tried / did:** typed the time by feel: «≈15:40» at 15:33, «16:17» at 16:16, «≈16:25» at 16:22.
+**Result:** ❌ three refusals by the stamp-gate hook; ✅ each fixed with `date` of the same minute.
+**Lesson:** a moment is probed in the same tool call as the write; the hook is the backstop, not the method.
+**Repro:** `date '+%Y-%m-%d %H:%M %z'` right before the Write that carries the stamp.
+**Trigger:** writing a time of day into any file → probe `date` first.
+**Not for:** future plans and appointments (tomorrow, or `claim-ok:` on the line).
+
 ### EXP-0003 · 2026-11-16 · ❌→✅ · #svg #icon #design
 class: render-unverified
 mechanized: tools/shot.mjs — every design page is looked at as a PNG before it is shown
