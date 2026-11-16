@@ -105,10 +105,30 @@ check('nozzle 0.8 → a different line count, still whole lines', /= \d+ лин�
 await setField('nozzle_mm', '0.4'); await setField('layer_mm', '0.2'); await setField('wall_mm', '2');   // back to the owner's defaults
 
 // ---- 2b. the build height Z is checked on its own: a 150 mm Z cannot take the upright ~223 mm rotor, X/Y 220 can
+await setField('split', 'no');                            // the print from parts off: the overflow is reported as such
 await setField('bed_z_mm', '150');
 check('build height Z 150 mm → «превышает область печати»', /превышает область печати/.test(await page.locator('#warnings').innerText()));
 await setField('bed_z_mm', '250');
 check('control: Z back to 250 mm → no overflow warning', !/превышает область печати/.test(await page.locator('#warnings').innerText()));
+await setField('split', 'auto');
+
+// ---- 2c. the print from parts (epic 02, plans/03 criterion 1): D 280 on 220 × 220 × 250 → 5 parts, each STL fits the bed
+await setField('diameter_mm', '280'); await page.waitForTimeout(1500);
+const wsp = await page.locator('#warnings').innerText();
+check('split D 280: «печатается из 5 деталей: этажей ядра — 2, одинаковых юбок — 3»', /печатается из 5 деталей: этажей ядра — 2, одинаковых юбок — 3/.test(wsp), (wsp.match(/Ротор больше стола[^.]*\./) || ['none'])[0]);
+const prow = await page.locator('#parts tr').count();
+check('split D 280: the parts table lists 3 parts (+ the header)', prow === 4 && await page.locator('#parts').isVisible(), `${prow} rows`);
+const stlBox = (bytes) => { const n = bytes.readUInt32LE(80), lo = [1e9, 1e9, 1e9], hi = [-1e9, -1e9, -1e9];
+  for (let i = 0; i < n; i++) for (let v = 0; v < 3; v++) for (let k = 0; k < 3; k++) { const x = bytes.readFloatLE(84 + 50 * i + 12 + 12 * v + 4 * k); lo[k] = Math.min(lo[k], x); hi[k] = Math.max(hi[k], x); }
+  return hi.map((h, k) => h - lo[k]); };
+for (const id of ['floor1', 'floor2', 'skirt']) {
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.click(`#parts [data-part="${id}"]`)]);
+  const f = join(shots, dl.suggestedFilename()); await dl.saveAs(f); const sz = stlBox(readFileSync(f));
+  check(`split D 280: ${id} STL fits 220 × 220 × 250`, sz[0] <= 220 && sz[1] <= 220 && sz[2] <= 250 && sz[2] > 10, `${dl.suggestedFilename()} · ${sz.map((x) => x.toFixed(0)).join(' × ')}`);
+}
+await page.screenshot({ path: join(shots, '1f-split-280.png'), fullPage: true });
+await setField('diameter_mm', '220'); await page.waitForTimeout(1200);
+check('control: D 220 fits whole → no parts table', !(await page.locator('#parts').isVisible()));
 
 // ---- 3. «by power»: the page picks the diameter
 await setField('mode', 'power'); await setField('target_w', '5'); await setField('target_v', '6');

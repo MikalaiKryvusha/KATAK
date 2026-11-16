@@ -100,6 +100,24 @@ for (const shape of ['ellipse', 'ogive', 'cone', 'sigmoid']) {
     return Math.max(...sg.m.v.filter((p) => p[2] >= z1 - 0.05).map((p) => Math.hypot(p[0] - (sg.b.lo[0] + sRb), p[1] - (sg.b.lo[1] + sg.b.size[1] / 2)))) >= 0.2; })());
 }
 
+// ---- 2b. the print from parts (epic 02, phase 1; plans/03 criteria 2–3): D 280 on a 220 × 220 × 250 bed
+console.log('2b. split');
+{
+  const inp = { diameter_mm: 280, wall_mm: 2, layer_mm: 0.2, bore: 'bearings', bore_mm: 8, bearing_od_mm: 22, bearing_w_mm: 7, detail: 'medium', ties: 0, rim: false };
+  const sp = K.split(inp, { xy: 220, z: 250 });
+  check('split D 280: 2 floors + 1 skirt printed 3 times = 5 parts', sp.floors === 2 && sp.parts.length === 3 && sp.total === 5, `${sp.parts.map((q) => `${q.id}×${q.count}`).join(', ')}`);
+  for (const q of sp.parts) {
+    const c = K.checkClosed(q.mesh);
+    check(`split ${q.id}: closed, positive volume`, c.closed && K.signedVolume(q.mesh) > 0, `open ${c.open}, doubled ${c.doubled}`);
+    check(`split ${q.id}: fits 220 × 220 × 250 after placement`, q.size[0] <= 220 && q.size[1] <= 220 && q.size[2] <= 250, q.size.map((x) => x.toFixed(0)).join(' × '));
+  }
+  const whole = K.build(inp).parts.rotor, vW = K.signedVolume(whole), vP = sp.parts.reduce((s, q) => s + q.count * K.signedVolume(q.mesh), 0);
+  check('split D 280: Σ part volumes within 2 % of the whole rotor', Math.abs(vP - vW) / vW < 0.02, `${vP.toFixed(0)} vs ${vW.toFixed(0)} mm³ (${(100 * (vP - vW) / vW).toFixed(2)} %)`);
+  check('assembly path D 280: no skirt point blocked from the front', sp.blocked === 0, `${(100 * sp.blocked).toFixed(1)} %, wrap ${sp.wrap_deg.toFixed(0)}°`);
+  const big = K.split({ ...inp, diameter_mm: 340, detail: 'low' }, { xy: 220, z: 250 });
+  check('control: D 340 — the skirt wraps > 120° and its path is blocked', big.blocked > 0.02 && big.wrap_deg > 120, `${(100 * big.blocked).toFixed(1)} %, wrap ${big.wrap_deg.toFixed(0)}°`);
+}
+
 // ---- 3. placement and size
 console.log('3. placement and size');
 {

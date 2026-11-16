@@ -1,6 +1,6 @@
 # Plan 03 — epic 02, phase 1: cut the computed rotor into core floors and skirts (butt seams)
 
-> **Created:** 2026-11-16 · **Parent:** `plans/02_EPIC_split_print.md` (row «1 · разрез») · **Status:** 🔧 in progress ·
+> **Created:** 2026-11-16 · **Parent:** `plans/02_EPIC_split_print.md` (row «1 · разрез») · **Status:** ✅ steps 1–7 done 2026-11-16 17:42 +03:00 (run report testcases/reports/2026-11-16_split-print-phase1.md); the closing judge pass pending ·
 > **Outbound:** —
 
 ## Goal vector
@@ -19,17 +19,18 @@ their STL files. Anchor: «1 · разрез | этажи ядра и юбки �
 
 ## Steps
 
-- [ ] 1. Core: `blade()` takes a region in its own coordinates — u range and v range per row (v_lo(u), v_hi(u)); rows narrower
+- [x] 1. Core: `blade()` takes a region in its own coordinates — u range and v range per row (v_lo(u), v_hi(u)); rows narrower
       than 0.3 mm are dropped; every contiguous run of rows becomes its own `gridSolid`.
-- [ ] 2. Core: `split(p, d, bed)` — floors f = ⌈H / Z⌉ at equal planes; r_cut = bed_xy/2 − 5 mm; the core blade v ≤ v_c(u),
+- [x] 2. Core: `split(p, d, bed)` — floors f = ⌈H / Z⌉ at equal planes; r_cut = bed_xy/2 − 5 mm; the core blade v ≤ v_c(u),
       the skirt v ≥ v_c(u), the floor split v ≶ v_f(u) (z linear in v along the blade's straight generator); the hub cut at the
       planes (revolve profiles per floor); ties and rim off in split mode (a warning names it).
-- [ ] 3. Core: placement — each part stands on z = 0; the skirt turned about the axis to its smallest footprint.
-- [ ] 4. Core: `assemblyBlocked(p, d, r_cut)` — the share of skirt points with another blade in front at the same angle and radius.
-- [ ] 5. Page: field «Печать по частям» (авто · нет); the parts table in step 5 (name · count · size) and one STL button per part.
-- [ ] 6. Tests: `kalculator/test.mjs` part «split» (criteria 2–3, control: D 220 → one part); `tools/ui-run.mjs` case «split»
+- [x] 3. Core: placement — each part stands on z = 0; the skirt turned about the axis to its smallest footprint.
+- [x] 4. Core: `assemblyBlocked(p, d, r_cut)` — the share of skirt points with another blade in front at the same angle and radius.
+- [x] 5. Page: field «Печать по частям» (авто · нет); the parts table in step 5 (name · count · size) and one STL button per part.
+- [x] 6. Tests: `kalculator/test.mjs` part «split» (criteria 2–3, control: D 220 → one part); `tools/ui-run.mjs` case «split»
       (criterion 1, the downloaded STLs fit the bed).
-- [ ] 7. Run report in `testcases/reports/`; a look at the parts (render or preview) by the agent; commit; `/fable-judge`.
+- [x] 7. Run report in `testcases/reports/`; a look at the parts (render or preview) by the agent; commit.
+- [ ] 8. `/fable-judge` pass closing the phase — before the operational plan of phase 2 is written.
 
 ## Risks
 

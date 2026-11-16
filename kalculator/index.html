@@ -184,6 +184,7 @@ footer { color: var(--muted); font-size: 13px; display: flex; flex-direction: co
       <button class="btn secondary" type="button" id="dl-nose" data-i18n="dlnose"></button>
       <span class="note" id="build-info"></span>
     </div>
+    <div id="parts" hidden></div>
   </div>
 </section>
 
@@ -413,21 +414,42 @@ const KATAK = (() => {
     const r = r0 + v * (ro - r0), z = zh + v * (zo - zh) * (ro - r0) / Math.max(1e-9, ro - d.rh);
     return [r * Math.cos(th), r * Math.sin(th), z];
   }
-  function blade(p, d, k, wall, det) {
-    const top = [], bot = [], eps = 1e-4, rRoot = d.rh - wall / 2;   // the root sinks half a wall into the hub
+  // A blade, or a PART of it (epic 02, the print from parts): `region` = { ua, ub, lo(u), hi(u) } in the blade's own
+  // coordinates — u along the wrap, v across the span (0 at the root, 1 at the edge); rows narrower than MIN_ROW_MM are
+  // dropped and every contiguous run of rows becomes its own closed sheet. Without a region — the whole blade. [NOT-TESTED]
+  const MIN_ROW_MM = 0.3;
+  function blade(p, d, k, wall, det, region = null) {
+    const eps = 1e-4, rRoot = d.rh - wall / 2;              // the root sinks half a wall into the hub
     const S = (u, v) => bladeSurface(p, d, k, u, v, rRoot);
-    for (let i = 0; i <= det.along; i++) {
-      const u = d.u0 + (1 - d.u0) * i / det.along, rt = [], rb = [];
-      for (let j = 0; j <= det.across; j++) {
-        const v = j / det.across, P = S(u, v);
-        const du = sub(S(Math.min(1, u + eps), v), S(Math.max(d.u0, u - eps), v));
-        const dv = sub(S(u, Math.min(1, v + eps)), S(u, Math.max(0, v - eps)));
-        const n = unit(cross(du, dv));
-        rt.push(add(P, mul(n, wall / 2))); rb.push(sub(P, mul(n, wall / 2)));
-      }
-      top.push(rt); bot.push(rb);
+    const ua = Math.max(d.u0, region ? region.ua : d.u0), ub = Math.min(1, region ? region.ub : 1);
+    const lo = region ? region.lo : () => 0, hi = region ? region.hi : () => 1;
+    const span = (u) => d.rh + (d.R - d.rh) * Math.pow(u, p.p_exp) - rRoot;
+    const N = Math.max(2, Math.round(det.along * (ub - ua) / (1 - d.u0)));
+    const runs = []; let cur = null;
+    for (let i = 0; i <= N; i++) {
+      const u = ua + (ub - ua) * i / N, a = Math.max(0, lo(u)), b = Math.min(1, hi(u));
+      if ((b - a) * span(u) < MIN_ROW_MM) { if (cur) runs.push(cur); cur = null; continue; }
+      (cur ??= []).push([u, a, b]);
     }
-    return gridSolid(top, bot);
+    if (cur) runs.push(cur);
+    const out = mesh();
+    for (const rows of runs) {
+      if (rows.length < 2) continue;
+      const top = [], bot = [];
+      for (const [u, a, b] of rows) {
+        const rt = [], rb = [];
+        for (let j = 0; j <= det.across; j++) {
+          const v = a + (b - a) * j / det.across, P = S(u, v);
+          const du = sub(S(Math.min(1, u + eps), v), S(Math.max(d.u0, u - eps), v));
+          const dv = sub(S(u, Math.min(1, v + eps)), S(u, Math.max(0, v - eps)));
+          const n = unit(cross(du, dv));
+          rt.push(add(P, mul(n, wall / 2))); rb.push(sub(P, mul(n, wall / 2)));
+        }
+        top.push(rt); bot.push(rb);
+      }
+      append(out, gridSolid(top, bot));
+    }
+    return out;
   }
   // Validity (§6.2, checks 1–2): the root must stay downstream of the nose and rise with u; neighbouring blades must keep a gap.
   function checks(p, d, wall) {
@@ -559,6 +581,77 @@ const KATAK = (() => {
     let noseInfo = null;
     if (p.nose) { noseInfo = nose(p, d, det); parts.nose = noseInfo.mesh; }
     return { params: p, wall: wf, dims: d, checks: checks(p, d, wall), nose: noseInfo && { length_mm: noseInfo.length_mm, base_mm: noseInfo.base_mm }, parts, lift_mm: -lo[2] };
+  }
+
+  // ---------------------------------------------------------------- the print from parts (epic 02, phase 1)
+  // The computed rotor cut into core floors (planes across the axis) and skirts (outside r_cut in the top view): every part a
+  // closed mesh that fits the bed; all parts assemble along the axis from the nose, back to front (researches/07 §3–§4).
+  // Phase 1 — butt seams; the dovetail comb is phase 2. Ties and the exit rim are not built in this mode. [NOT-TESTED]
+  const SPLIT_MARGIN_MM = 5;
+  function clipSlab(poly, za, zb) {                         // a closed (r, z) polygon clipped to za ≤ z ≤ zb (Sutherland–Hodgman)
+    const pass = (pts, inside, at) => { const out = []; for (let i = 0; i < pts.length; i++) { const A = pts[i], B = pts[(i + 1) % pts.length];
+      const ia = inside(A), ib = inside(B); if (ia) out.push(A); if (ia !== ib) out.push(at(A, B)); } return out; };
+    const cut = (z) => (A, B) => { const t = (z - A[1]) / (B[1] - A[1]); return [A[0] + t * (B[0] - A[0]), z]; };
+    return pass(pass(poly, (P) => P[1] >= za - 1e-9, cut(za)), (P) => P[1] <= zb + 1e-9, cut(zb));
+  }
+  function hubPart(p, d, det, za, zb) {
+    const R = d.rh;
+    if (p.bore === 'solid') return prism(p.bore_kind, 2 * R, za, zb, det.round);
+    if (p.bore === 'profile') return prism('round', 2 * R, za, zb, det.round, p.bore_kind, p.bore_mm + p.fit_mm);
+    const z0 = -p.hub_front_mm, z1 = d.Ls + p.hub_back_mm, rb = (p.bore_mm + 1.0) / 2, rs = (p.bearing_od_mm - p.fit_mm) / 2, w = p.bearing_w_mm;
+    return revolve(clipSlab([[R, z0], [R, z1], [rs, z1], [rs, z1 - w], [rb, z1 - w], [rb, z0 + w], [rs, z0 + w], [rs, z0]], za, zb), det.round);
+  }
+  // a part stands on z = 0; a skirt is also turned about the axis to its smallest footprint and centred
+  function place(m, turn) {
+    if (turn) {
+      let best = null;
+      for (let a = 0; a < 180; a += 1) { const c = Math.cos(a * Math.PI / 180), s = Math.sin(a * Math.PI / 180);
+        let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+        for (const q of m.v) { const X = q[0] * c + q[1] * s, Y = -q[0] * s + q[1] * c; x0 = Math.min(x0, X); x1 = Math.max(x1, X); y0 = Math.min(y0, Y); y1 = Math.max(y1, Y); }
+        const big = Math.max(x1 - x0, y1 - y0); if (!best || big < best.big) best = { big, a }; }
+      const c = Math.cos(best.a * Math.PI / 180), s = Math.sin(best.a * Math.PI / 180);
+      m.v = m.v.map((q) => [q[0] * c + q[1] * s, -q[0] * s + q[1] * c, q[2]]);
+    }
+    const b = bounds(m);
+    return translate(m, [-(b.lo[0] + b.hi[0]) / 2, -(b.lo[1] + b.hi[1]) / 2, -b.lo[2]]);
+  }
+  // the share of skirt points that another blade covers in front (smaller z) at the same angle and radius — such a point
+  // cannot arrive by a straight move along the axis from the nose (researches/07 §3)
+  function assemblyBlocked(p, d, rCut, uc) {
+    const ro = (u) => d.rh + (d.R - d.rh) * Math.pow(u, p.p_exp);
+    const zAt = (u, r) => { const zo = d.Ls * Math.pow(u, p.q_exp), zh = zo - (ro(u) - d.rh) / Math.tan(alphaAt(p, u)); return zh + (r - d.rh) / Math.max(1e-9, ro(u) - d.rh) * (zo - zh); };
+    let n = 0, blocked = 0;
+    for (let i = 0; i <= 120; i++) { const u = uc + (1 - uc) * i / 120;
+      for (let j = 0; j <= 12; j++) { const r = rCut + (ro(u) - rCut) * j / 12, z = zAt(u, r); n++;
+        for (let m = 1; m < p.blades * p.turns * 2 + 1; m++) { const u2 = u - m / (p.blades * p.turns); if (u2 < d.u0) break; if (r <= ro(u2) && zAt(u2, r) < z) { blocked++; break; } } } }
+    return n ? blocked / n : 0;
+  }
+  function split(input = {}, bed = { xy: 220, z: 250 }) {
+    const { p, wf } = resolve(input);
+    const det = detailOf(p.detail), wall = wf.wall_mm, d = dims(p, wall), rRoot = d.rh - wall / 2;
+    const z0 = -p.hub_front_mm, z1 = d.Ls + p.hub_back_mm, H = z1 - z0, floors = Math.max(1, Math.ceil(H / bed.z));
+    const planes = [-Infinity, ...Array.from({ length: floors - 1 }, (_, i) => z0 + H * (i + 1) / floors), Infinity];
+    const rCut = bed.xy / 2 - SPLIT_MARGIN_MM;
+    const ro = (u) => d.rh + (d.R - d.rh) * Math.pow(u, p.p_exp);
+    const vR = (u) => (rCut - rRoot) / (ro(u) - rRoot);    // v of the radius r_cut along the generator (> 1: the edge is inside)
+    const vZ = (u, z) => {                                  // v of the height z along the generator (z is linear in v)
+      if (!Number.isFinite(z)) return z;
+      const zo = d.Ls * Math.pow(u, p.q_exp), zh = zo - (ro(u) - d.rh) / Math.tan(alphaAt(p, u));
+      return (z - zh) / ((zo - zh) * (ro(u) - rRoot) / Math.max(1e-9, ro(u) - d.rh));
+    };
+    const parts = [];
+    for (let i = 0; i < floors; i++) {
+      const m = mesh();
+      for (let k = 0; k < p.blades; k++) append(m, blade(p, d, k, wall, det, { ua: d.u0, ub: 1, lo: (u) => vZ(u, planes[i]), hi: (u) => Math.min(vR(u), vZ(u, planes[i + 1])) }));
+      append(m, hubPart(p, d, det, Math.max(z0, planes[i]), Math.min(z1, planes[i + 1])));
+      parts.push({ id: `floor${i + 1}`, kind: 'floor', index: i + 1, of: floors, count: 1, mesh: m });
+    }
+    const uc = Math.min(1, Math.max(d.u0, Math.pow(Math.max(0, (rCut - d.rh) / (d.R - d.rh)), 1 / p.p_exp)));
+    if (uc < 1) parts.push({ id: 'skirt', kind: 'skirt', count: p.blades, mesh: blade(p, d, 0, wall, det, { ua: uc, ub: 1, lo: vR, hi: () => 1 }) });
+    for (const part of parts) { place(part.mesh, part.kind === 'skirt'); part.size = bounds(part.mesh).size; }
+    const fits = parts.every((q) => q.size[0] <= bed.xy && q.size[1] <= bed.xy && q.size[2] <= bed.z);
+    return { parts, floors, rCut, total: parts.reduce((s, q) => s + q.count, 0), wrap_deg: 360 * p.turns * (1 - uc),
+      blocked: uc < 1 ? assemblyBlocked(p, d, rCut, uc) : 0, fits, params: p };
   }
 
   // Side view for the page's rotor diagram (ideas/04): the blade edges projected on the plane through the axis (z along,
@@ -707,7 +800,7 @@ const KATAK = (() => {
     return new Uint8Array(buf);
   }
 
-  return { DEFAULTS, DETAIL, SITE_DEFAULTS, CP_PRESETS, TERRAIN, SITE, MATERIALS, BEARINGS, build, resolve, sideView, alphaAt, wallForNozzle,
+  return { DEFAULTS, DETAIL, SITE_DEFAULTS, CP_PRESETS, TERRAIN, SITE, MATERIALS, BEARINGS, build, split, resolve, sideView, alphaAt, wallForNozzle,
     physics, diameterForPower, density, windAt, gamma, weibullC, toSTL, checkClosed, signedVolume, bounds,
     _: { gridSolid, prism, revolve, sweepTube, profileRadius, mesh, append } };
 })();
@@ -758,6 +851,8 @@ const FIELDS = [
   ['material', 'print', 'sel', 'PETG', { opts: ['ASA', 'PETG', 'PACF', 'ABS', 'PLA'] }],
   ['bed_mm', 'print', 'num', 220, { min: 100, max: 1000, step: 1, unit: 'mm' }],
   ['bed_z_mm', 'print', 'num', 250, { min: 100, max: 1000, step: 1, unit: 'mm' }],
+  // the print from parts (epic 02; owner 2026-11-16 17:26, HOUSE_RULES R8): «auto» — cut the rotor when it does not fit the bed
+  ['split', 'print', 'sel', 'auto', { opts: ['auto', 'no'] }],
   ['detail', 'print', 'num', 70, { min: 10, max: 100, step: 10, unit: '%' }],
   ['bore', 'print', 'sel', 'bearings', { opts: ['bearings', 'profile', 'solid'] }],
   ['bearing', 'print', 'sel', '608', { opts: ['auto', '608', '6000', '6001', '6002', '6003', '6004', '6005'] }],
@@ -799,7 +894,7 @@ const I18N = {
       blades: 'Число лопастей', turns: 'Число витков спирали', angle_mode: 'Закон угла раскрытия', alpha_deg: 'Угол раскрытия',
       ld: 'Отношение длины к диаметру', hub_ratio: 'Отношение диаметра ступицы к диаметру ротора', hand: 'Направление закрутки',
       cp_preset: 'Оценка коэффициента мощности', nozzle_mm: 'Диаметр сопла', layer_mm: 'Высота слоя', wall_mm: 'Толщина стенки лопасти',
-      material: 'Материал', bed_mm: 'Область печати по X и Y', bed_z_mm: 'Высота области печати по Z', detail: 'Детализация модели', bore: 'Исполнение оси',
+      material: 'Материал', split: 'Печать по частям', bed_mm: 'Область печати по X и Y', bed_z_mm: 'Высота области печати по Z', detail: 'Детализация модели', bore: 'Исполнение оси',
       bearing: 'Подшипник', bore_kind: 'Профиль отверстия или оси', bore_mm: 'Диаметр отверстия или оси', ties: 'Число печатных стяжек',
       tie_mm: 'Диаметр стяжки', rim: 'Обод на выходе', nose: 'Носовой обтекатель', nose_shape: 'Форма обтекателя',
       nose_ratio: 'Отношение длины обтекателя к диаметру', nose_gap_mm: 'Расстояние от ротора до обтекателя',
@@ -815,6 +910,7 @@ const I18N = {
       ties: 'осевые стойки между витками; металлические шпильки будут добавлены в следующей версии', rim: 'автоматически при диаметре от 400 мм',
       nose_gap_mm: 'между ротором и обтекателем располагается стойка переднего подшипника',
       detail: '10 % соответствует грубой сетке, 100 % наиболее плотной; превью и файлы STL строятся с этой детализацией',
+      split: 'если ротор больше стола, он режется на этажи ядра и три юбки; детали собираются вдоль оси со стороны носа',
     },
     o: {
       sea: 'морская поверхность', snow: 'снег, лёд, отмели', open: 'ровная открытая местность, трава', crops: 'посевы, редкие препятствия',
@@ -842,6 +938,7 @@ const I18N = {
       cutIn: 'включение', meanV: 'средняя', ratedV: 'номинал', cutOut: 'максимум',
       legPower: 'электрическая мощность', legShare: 'доля времени на интервал 0,5 м/с', legMean: 'средняя скорость ветра',
       tipV: 'Скорость ветра', tipP: 'Мощность', tipS: 'Доля времени',
+      parts: 'Детали для печати', part: 'Деталь', count: 'Количество', size: 'Габарит, мм', floor: 'Этаж ядра {i} из {n}', skirt: 'Юбка лопасти',
     },
     w: {
       ok: 'Геометрия удовлетворяет проверкам: корневая кромка лопасти расположена за носовой частью, зазор между витками достаточен.',
@@ -853,6 +950,10 @@ const I18N = {
       material: 'Выбранный материал не предназначен для наружной установки. Для эксплуатации под солнцем рекомендуется ASA.',
       stress: 'Напряжение на кромке при разносе превышает допускаемое. Установка требует электрического торможения.',
       shaft: 'Внутренний диаметр подшипника {b} равен {d} мм и меньше расчётного диаметра стального вала {s} мм. Вал рассчитан на стоянку ротора при скорости ветра {v} м/с из стали с пределом текучести 250 МПа.',
+      split: 'Ротор больше стола принтера и печатается из {n} деталей: этажей ядра — {f}, одинаковых юбок — {s}. Сборка: задний этаж, передний этаж, затем юбки; каждая деталь надвигается вдоль оси со стороны носа.',
+      splitBig: 'Детали ротора не помещаются на стол даже по частям. Следует уменьшить диаметр.',
+      splitBlocked: 'Юбка охватывает {a}° витка, больше 120°: при сборке вдоль оси её хвост упирается в соседнюю лопасть. Следует уменьшить диаметр; деление юбки на сегменты появится в следующей версии.',
+      splitNoTies: 'При печати по частям стяжки и обод на выходе не строятся.',
       thick: 'Толщина стенки превышает 1,5 % диаметра, что снижает коэффициент мощности.',
       layer: 'Высота слоя {h} мм составляет {p} % диаметра сопла. Рабочий диапазон высоты слоя составляет 25–75 % диаметра сопла.',
       big: 'Ротор диаметром более 1 м печатается только как прототип; серийные роторы изготавливаются из стеклопластика.',
@@ -886,7 +987,7 @@ const I18N = {
       blades: 'Number of blades', turns: 'Number of spiral turns', angle_mode: 'Opening angle law', alpha_deg: 'Opening angle',
       ld: 'Length-to-diameter ratio', hub_ratio: 'Hub-to-rotor diameter ratio', hand: 'Winding direction',
       cp_preset: 'Power coefficient estimate', nozzle_mm: 'Nozzle diameter', layer_mm: 'Layer height', wall_mm: 'Blade wall thickness',
-      material: 'Material', bed_mm: 'Build area in X and Y', bed_z_mm: 'Build height in Z', detail: 'Model detail', bore: 'Axle arrangement',
+      material: 'Material', split: 'Print from parts', bed_mm: 'Build area in X and Y', bed_z_mm: 'Build height in Z', detail: 'Model detail', bore: 'Axle arrangement',
       bearing: 'Bearing', bore_kind: 'Hole or axle profile', bore_mm: 'Hole or axle diameter', ties: 'Number of printed ties',
       tie_mm: 'Tie diameter', rim: 'Exit rim', nose: 'Nose fairing', nose_shape: 'Fairing shape',
       nose_ratio: 'Fairing length-to-diameter ratio', nose_gap_mm: 'Distance from rotor to fairing',
@@ -902,6 +1003,7 @@ const I18N = {
       ties: 'axial posts between the turns; metal threaded rods will follow in the next version', rim: 'automatic from 400 mm in diameter',
       nose_gap_mm: 'the front bearing stand stands between the rotor and the fairing',
       detail: '10 % gives the coarsest mesh, 100 % the densest; the preview and the STL files use this detail',
+      split: 'when the rotor is larger than the bed, it is cut into core floors and three skirts; the parts assemble along the axis from the nose',
     },
     o: {
       sea: 'sea surface', snow: 'snow, ice, mud flats', open: 'flat open terrain, grass', crops: 'crops, few obstacles',
@@ -929,6 +1031,7 @@ const I18N = {
       cutIn: 'cut-in', meanV: 'mean', ratedV: 'rated', cutOut: 'maximum',
       legPower: 'electrical power', legShare: 'share of time per 0.5 m/s bin', legMean: 'mean wind speed',
       tipV: 'Wind speed', tipP: 'Power', tipS: 'Share of time',
+      parts: 'Parts to print', part: 'Part', count: 'Quantity', size: 'Size, mm', floor: 'Core floor {i} of {n}', skirt: 'Blade skirt',
     },
     w: {
       ok: 'The geometry satisfies the checks: the blade root edge lies behind the nose, the gap between the turns is sufficient.',
@@ -940,6 +1043,10 @@ const I18N = {
       material: 'The selected material is not intended for outdoor use. ASA is recommended for operation in the sun.',
       stress: 'The tip stress at runaway exceeds the allowable value. The installation requires electrical braking.',
       shaft: 'The bore of bearing {b} is {d} mm, below the computed steel shaft diameter of {s} mm. The shaft is sized for the parked rotor at a wind speed of {v} m/s and for steel with a yield strength of 250 MPa.',
+      split: 'The rotor is larger than the printer bed and is printed from {n} parts: core floors — {f}, identical skirts — {s}. Assembly: the rear floor, the front floor, then the skirts; every part slides on along the axis from the nose.',
+      splitBig: 'The parts do not fit the bed even when split. Reduce the diameter.',
+      splitBlocked: 'A skirt wraps {a}° of the turn, more than 120°: on the axial assembly its tail meets the neighbouring blade. Reduce the diameter; splitting the skirt into segments comes in the next version.',
+      splitNoTies: 'Ties and the exit rim are not built for a print from parts.',
       thick: 'The wall exceeds 1.5 % of the diameter, which lowers the power coefficient.',
       layer: 'The layer height of {h} mm is {p} % of the nozzle diameter. The working range of the layer height is 25–75 % of the nozzle diameter.',
       big: 'A rotor over 1 m in diameter is printed only as a prototype; production rotors are made of glass fibre.',
@@ -1027,7 +1134,7 @@ function compute() {
   if (g.bore === 'bearings') Object.assign(g, { bore_mm: pick.d, bearing_od_mm: pick.D, bearing_w_mm: pick.B });
   else g.bore_mm = num('bore_mm') ?? pick.d;
   geo = KATAK.resolve(g); ph = KATAK.physics(s, geo);
-  last = { s, g, geo, ph, bearing: pick, powerNote, build: last && last.build, checks: last && last.checks };
+  last = { s, g, geo, ph, bearing: pick, powerNote, build: last && last.build, checks: last && last.checks, split: last && last.split };
   render();
   schedulePreview();
 }
@@ -1064,7 +1171,7 @@ function render() {
     if (b.nose) extra.push([t.r.nose, `⌀${fmt(b.nose.base_mm, 1)} × ${fmt(b.nose.length_mm, 1)} ${unit('mm')}`]);
   }
   $('#res-spec').innerHTML = rows(extra);
-  renderWarnings(); renderChart(); vizSite(); vizRotor(); vizPrint();
+  renderWarnings(); renderChart(); vizSite(); vizRotor(); vizPrint(); renderParts();
 }
 function renderWarnings() {
   const { s, geo, ph, powerNote } = last, t = T(), p = geo.p, list = [];
@@ -1086,8 +1193,14 @@ function renderWarnings() {
   if (layerShare < 0.25 - 1e-9 || layerShare > 0.75 + 1e-9) list.push(['warn', fill(t.w.layer, { h: fmt(geo.wf.layer_mm, 2), p: fmt(layerShare * 100) })]);
   if (p.diameter_mm > 1000) list.push(['warn', t.w.big]);
   if (s.site === 'roof' || s.site === 'yard') list.push(['warn', t.w.roof]);
-  // X/Y against the bed, Z (the rotor printed upright) against the build height — owner 2026-11-16 16:38
-  if (last.build && (Math.max(last.build.size[0], last.build.size[1]) > num('bed_mm') || last.build.size[2] > num('bed_z_mm'))) list.push(['bad', t.w.bed]);
+  // X/Y against the bed, Z (the rotor printed upright) against the build height — owner 2026-11-16 16:38; in the print from
+  // parts (epic 02) the page names the parts and the order of assembly instead
+  const sp = last.split;
+  if (sp) {
+    list.push([sp.fits ? 'ok' : 'bad', sp.fits ? fill(t.w.split, { n: sp.total, f: sp.floors, s: sp.total - sp.floors }) : t.w.splitBig]);
+    if (sp.blocked > 0) list.push(['warn', fill(t.w.splitBlocked, { a: fmt(sp.wrap_deg) })]);
+    if (p.ties > 0 || p.rim) list.push(['warn', t.w.splitNoTies]);
+  } else if (last.build && (Math.max(last.build.size[0], last.build.size[1]) > num('bed_mm') || last.build.size[2] > num('bed_z_mm'))) list.push(['bad', t.w.bed]);
   $('#warnings').innerHTML = list.map(([c, txt]) => `<li class="${c}">${txt}</li>`).join('');
 }
 const axisStyle = 'stroke="#3A2633"';
@@ -1228,9 +1341,31 @@ function preview() {
   const t0 = performance.now();
   const b = buildParts(last.g.detail);
   last.build = b; last.checks = b.r.checks.warn;
+  // the print from parts (epic 02): when the whole rotor does not fit the bed and the field says «auto»
+  const bed = { xy: num('bed_mm'), z: num('bed_z_mm') };
+  const fitsWhole = Math.max(b.size[0], b.size[1]) <= bed.xy && b.size[2] <= bed.z;
+  last.split = str('split') === 'auto' && !fitsWhole ? KATAK.split({ ...last.g, detail: last.g.detail, ties: 0, rim: false }, bed) : null;
   viewer.show(b.r, last);
   render();
   $('#build-info').textContent = `${fmt(b.r.parts.rotor.f.length)} △ · ${Math.round(performance.now() - t0)} ms`;
+}
+// the parts table of the print from parts: name · quantity · size · one STL button per part (one skirt file printed N times)
+function renderParts() {
+  const box = $('#parts'), sp = last.split, t = T();
+  if (!sp) { box.hidden = true; box.innerHTML = ''; return; }
+  const name = (q) => q.kind === 'floor' ? t.r.floor.replace('{i}', q.index).replace('{n}', q.of) : t.r.skirt;
+  box.hidden = false;
+  box.innerHTML = `<h3>${t.r.parts}</h3><table class="spec"><tr><td>${t.r.part}</td><td>${t.r.count}</td><td>${t.r.size}</td><td></td></tr>` +
+    sp.parts.map((q) => `<tr><td>${name(q)}</td><td>${q.count}</td><td>${q.size.map((x) => fmt(x)).join(' × ')}</td><td><button class="btn secondary" type="button" data-part="${q.id}">STL</button></td></tr>`).join('') + '</table>';
+  for (const btn of box.querySelectorAll('[data-part]')) btn.addEventListener('click', () => downloadPart(btn.dataset.part));
+}
+function downloadPart(id) {
+  const q = last.split && last.split.parts.find((x) => x.id === id); if (!q) return;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([KATAK.toSTL(q.mesh, id)], { type: 'model/stl' }));
+  a.download = `katak-${id}-${last.g.diameter_mm}mm${q.count > 1 ? `-x${q.count}` : ''}.stl`;
+  document.body.append(a); a.click(); a.remove();
+  $('#build-info').textContent = `${id}: ${fmt(q.mesh.f.length)} △ · ${a.download}`;
 }
 function download(part) {
   const b = buildParts(last.g.detail);
