@@ -82,6 +82,7 @@
 
 ### EXP-0007 · 2026-11-16 · ❌→✅ · #git #commit #message
 class: stale-commit-message
+none-cheap: a guard would need the harness signal of a refused Write; the read-back costs one command in the same call
 **Context:** the closing commit of session 2, its message written to `.work/tmp/commit-msg.txt` with the Write tool.
 **Tried / did:** ran `git add`, `git commit -F .work/tmp/commit-msg.txt`, `git push` in one response after the Write.
 **Result:** ❌ the Write was refused («File has been modified since read»), the commit took the PREVIOUS message (a5a367e went out
